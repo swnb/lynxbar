@@ -1,16 +1,19 @@
 import AppKit
 import SwiftUI
 
+/// Displays the LynxBar application icon, version, and product summary in the About window.
 struct AboutView: View {
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(Theme.Font.largeTitle)
-                .foregroundStyle(.tint)
-            Text("LynxBar").font(.title.bold())
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 72, height: 72)
+                .accessibilityHidden(true)
+            Text("LynxBar").font(Theme.Font.title.bold())
             Text(AppInfo.versionString).foregroundStyle(.secondary)
             Text("macOS menu bar system monitor")
-                .font(.callout)
+                .font(Theme.Font.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }

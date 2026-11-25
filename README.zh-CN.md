@@ -1,10 +1,41 @@
-# LynxBar
+<p align="center">
+  <img src="./docs/assets/app-icon.png" width="128" height="128" alt="LynxBar 应用图标" />
+</p>
 
-[English](./README.md) | 简体中文
+<h1 align="center">LynxBar</h1>
 
-**原生、隐私优先的 macOS 菜单栏系统监控工具，内置安全移至废纸篓的磁盘清理与默认关闭的 Claude 订阅额度监控。**
+<p align="center">
+  <strong>原生、隐私优先的 macOS 菜单栏系统监控工具，内置安全磁盘清理与可选开启的 AI 订阅额度监控。</strong>
+</p>
 
-基于 Swift 6（`complete` 严格并发）、AppKit 与 SwiftUI 构建，零第三方依赖。
+<p align="center">
+  基于 Swift 6（<code>complete</code> 严格并发）、AppKit 与 SwiftUI 构建，零第三方依赖。
+</p>
+
+<p align="center">
+  <a href="https://github.com/swnb/lynxbar/actions/workflows/ci.yml"><img src="https://github.com/swnb/lynxbar/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/macOS-13.0%2B-000000?logo=apple&logoColor=white" alt="macOS 13.0+" />
+  <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0" />
+  <img src="https://img.shields.io/badge/Dependencies-Zero-59D163" alt="零第三方依赖" />
+  <a href="https://github.com/swnb/lynxbar/releases"><img src="https://img.shields.io/github/v/release/swnb/lynxbar?include_prereleases&color=2EB8E8&label=Release" alt="Release" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-3887FF" alt="MIT License" /></a>
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> · <strong>简体中文</strong>
+</p>
+
+<p align="center">
+  <a href="#核心特性">核心特性</a> •
+  <a href="#隐私承诺">隐私承诺</a> •
+  <a href="#安装指南">安装指南</a> •
+  <a href="#架构亮点">架构亮点</a> •
+  <a href="#文档与社区">文档与社区</a>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/social-preview.png" alt="LynxBar — macOS 菜单栏系统监控与 AI 额度面板" width="840" />
+</p>
 
 ---
 

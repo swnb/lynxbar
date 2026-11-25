@@ -1,10 +1,41 @@
-# LynxBar
+<p align="center">
+  <img src="./docs/assets/app-icon.png" width="128" height="128" alt="LynxBar App Icon" />
+</p>
 
-English | [简体中文](./README.zh-CN.md)
+<h1 align="center">LynxBar</h1>
 
-**A native, privacy-first macOS menu bar system monitor with Trash-safe disk cleanup and opt-in Claude subscription quota tracking.**
+<p align="center">
+  <strong>Sharp, native, privacy-first macOS menu bar system monitor &amp; opt-in AI subscription quota tracker.</strong>
+</p>
 
-Built in Swift 6 (`complete` strict concurrency) with AppKit, SwiftUI, and zero third-party dependencies.
+<p align="center">
+  Built in Swift 6 (<code>complete</code> strict concurrency) with AppKit, SwiftUI, and zero third-party dependencies.
+</p>
+
+<p align="center">
+  <a href="https://github.com/swnb/lynxbar/actions/workflows/ci.yml"><img src="https://github.com/swnb/lynxbar/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/macOS-13.0%2B-000000?logo=apple&logoColor=white" alt="macOS 13.0+" />
+  <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0" />
+  <img src="https://img.shields.io/badge/Dependencies-Zero-59D163" alt="Zero Dependencies" />
+  <a href="https://github.com/swnb/lynxbar/releases"><img src="https://img.shields.io/github/v/release/swnb/lynxbar?include_prereleases&color=2EB8E8&label=Release" alt="Release" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-3887FF" alt="MIT License" /></a>
+</p>
+
+<p align="center">
+  <strong>English</strong> · <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#privacy-commitments">Privacy</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#architecture-highlights">Architecture</a> •
+  <a href="#documentation--community">Docs</a>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/social-preview.png" alt="LynxBar — Sharp macOS Menu Bar Monitor + AI Quota" width="840" />
+</p>
 
 ---
 
