@@ -88,21 +88,27 @@ Launch **Review Files…** from the **Disk** panel to open the **LynxBar — Fre
 ## Installation
 
 ### Requirements
-- **macOS 13.0 (Ventura)** or later
+- **macOS 13.0 (Ventura)** or later (**Universal Binary**: Apple Silicon & Intel)
+
+### GitHub Releases (Recommended)
+Download the latest Universal Release directly from **[GitHub Releases (Latest)](https://github.com/swnb/lynxbar/releases/latest)**:
+- **`LynxBar-<version>-universal.dmg`** / **`.zip`** — notarized Developer ID build (when Apple Developer signing secrets are configured)
+- **`LynxBar-<version>-universal-unsigned.dmg`** / **`.zip`** — ad-hoc signed fallback build with `SHA256SUMS.txt` verification
+
+After dragging `LynxBar.app` to `/Applications`, verify checksums with `shasum -a 256 -c SHA256SUMS.txt`. If installing an **unsigned** release build, clear macOS Gatekeeper quarantine once before first launch:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/LynxBar.app
+```
 
 ### Homebrew Cask
-Install from the local cask formula or tap once published:
+Install from the local cask formula (or tap once published):
 
 ```sh
 brew install --cask ./Casks/lynxbar.rb
 ```
 
-*(If installing an unsigned or ad-hoc release build, add `--no-quarantine` or right-click **LynxBar.app → Open** on first launch.)*
-
-### GitHub Releases
-Download the latest archive from [GitHub Releases](https://github.com/swnb/lynxbar/releases):
-- `LynxBar-<version>.dmg` — notarized Developer ID build (when signing credentials are configured)
-- `LynxBar-<version>-unsigned.zip` — ad-hoc / unsigned fallback build with `SHA256SUMS.txt` verification
+*(For unsigned builds, pass `--no-quarantine`.)*
 
 ### Build from Source
 Requires Xcode with **Swift 6** and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`2.46.0` or newer):

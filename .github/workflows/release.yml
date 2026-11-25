@@ -101,7 +101,7 @@ jobs:
       - name: Fail on warnings
         run: |
           if grep -q ": warning:" build.log; then
-            echo "::error::Build emitted compiler warnings; zero-warning baseline is required."
+            echo "::error::Debug build emitted compiler warnings; zero-warning baseline is required."
             grep ": warning:" build.log | sort -u
             exit 1
           fi
@@ -142,10 +142,17 @@ jobs:
             SIGNED="false"
           fi
 
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE="true"
+          else
+            PRERELEASE="false"
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "signed=$SIGNED" >> "$GITHUB_OUTPUT"
-          echo "Release version=$VERSION signed=$SIGNED"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Release version=$VERSION signed=$SIGNED prerelease=$PRERELEASE"
 
       - name: Import Developer ID certificate
         if: steps.config.outputs.signed == 'true'
@@ -171,7 +178,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
 
-      - name: Archive, export, notarize, and package signed DMG
+      - name: Archive, export, notarize, and package signed universal release
         if: steps.config.outputs.signed == 'true'
         env:
           VERSION: ${{ steps.config.outputs.version }}
@@ -204,12 +211,21 @@ jobs:
             -project LynxBar.xcodeproj \
             -scheme LynxBar \
             -configuration Release \
+            -destination 'generic/platform=macOS' \
             -archivePath build/LynxBar.xcarchive \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             MARKETING_VERSION="$VERSION" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
-            archive
+            archive 2>&1 | tee build/release-build.log
+
+          if grep -q ": warning:" build/release-build.log; then
+            echo "::error::Release build emitted compiler warnings; zero-warning baseline is required."
+            grep ": warning:" build/release-build.log | sort -u
+            exit 1
+          fi
 
           xcodebuild \
             -exportArchive \
@@ -220,8 +236,17 @@ jobs:
           APP="build/export/LynxBar.app"
           [[ -d "$APP" ]] || { echo "Missing exported app at $APP"; exit 1; }
 
-          ditto -c -k --keepParent "$APP" build/LynxBar-notarize.zip
-          xcrun notarytool submit build/LynxBar-notarize.zip \
+          ARCHS_OUT="$(lipo -archs "$APP/Contents/MacOS/LynxBar")"
+          echo "Verified Universal architectures: $ARCHS_OUT"
+          [[ "$ARCHS_OUT" == *"arm64"* && "$ARCHS_OUT" == *"x86_64"* ]] || {
+            echo "::error::Expected universal binary (arm64 + x86_64), got: $ARCHS_OUT"
+            exit 1
+          }
+          codesign --verify --deep --strict "$APP"
+
+          ZIP="dist/LynxBar-${VERSION}-universal.zip"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          xcrun notarytool submit "$ZIP" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_APP_PASSWORD" \
@@ -229,19 +254,25 @@ jobs:
           xcrun stapler staple "$APP"
           xcrun stapler validate "$APP"
 
-          DMG="dist/LynxBar-${VERSION}.dmg"
-          hdiutil create -volname LynxBar -srcfolder "$APP" -ov -fs APFS "$DMG"
-          (cd dist && shasum -a 256 "LynxBar-${VERSION}.dmg" > SHA256SUMS.txt)
+          # Repackage stapled app into final ZIP and compressed UDZO DMG with Applications shortcut.
+          rm -f "$ZIP"
+          ditto -c -k --keepParent "$APP" "$ZIP"
 
-          printf '## LynxBar v%s\n\n' "$VERSION" > build/release-notes.md
-          cat <<'EOF' >> build/release-notes.md
-          Signed with Developer ID, notarized, and stapled for macOS 13+.
+          rm -rf build/dmg-root
+          mkdir -p build/dmg-root
+          ditto "$APP" build/dmg-root/LynxBar.app
+          ln -s /Applications build/dmg-root/Applications
+          DMG="dist/LynxBar-${VERSION}-universal.dmg"
+          hdiutil create -volname "LynxBar ${VERSION}" -srcfolder build/dmg-root -ov -format UDZO "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
 
-          ### Verification
-          ```sh
-          shasum -a 256 -c SHA256SUMS.txt
-          ```
-          EOF
+          (cd dist && shasum -a 256 "LynxBar-${VERSION}-universal.dmg" "LynxBar-${VERSION}-universal.zip" > SHA256SUMS.txt)
 
       - name: Clean up temporary keychain
         if: always() && steps.config.outputs.signed == 'true'
@@ -251,7 +282,7 @@ jobs:
           fi
           rm -f "${CERT_PATH:-}" build/exportOptions.plist
 
-      - name: Build unsigned fallback archive
+      - name: Build unsigned universal fallback release (DMG + ZIP)
         if: steps.config.outputs.signed != 'true'
         env:
           VERSION: ${{ steps.config.outputs.version }}
@@ -265,28 +296,107 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -derivedDataPath build/release-dd \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             MARKETING_VERSION="$VERSION" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_ALLOWED=YES \
-            build
+            build 2>&1 | tee build/release-build.log
+
+          if grep -q ": warning:" build/release-build.log; then
+            echo "::error::Release build emitted compiler warnings; zero-warning baseline is required."
+            grep ": warning:" build/release-build.log | sort -u
+            exit 1
+          fi
 
           APP="build/release-dd/Build/Products/Release/LynxBar.app"
           [[ -d "$APP" ]] || { echo "Missing built app at $APP"; exit 1; }
 
-          ZIP="dist/LynxBar-${VERSION}-unsigned.zip"
+          ARCHS_OUT="$(lipo -archs "$APP/Contents/MacOS/LynxBar")"
+          echo "Verified Universal architectures: $ARCHS_OUT"
+          [[ "$ARCHS_OUT" == *"arm64"* && "$ARCHS_OUT" == *"x86_64"* ]] || {
+            echo "::error::Expected universal binary (arm64 + x86_64), got: $ARCHS_OUT"
+            exit 1
+          }
+          codesign --verify --deep --strict "$APP"
+
+          ZIP="dist/LynxBar-${VERSION}-universal-unsigned.zip"
           ditto -c -k --keepParent "$APP" "$ZIP"
-          (cd dist && shasum -a 256 "LynxBar-${VERSION}-unsigned.zip" > SHA256SUMS.txt)
 
-          printf '## LynxBar v%s (Unsigned Build)\n\n' "$VERSION" > build/release-notes.md
-          cat <<'EOF' >> build/release-notes.md
-          > **Notice**: This archive is **unsigned and unnotarized** because Apple Developer signing secrets were not configured for this workflow run.
-          > macOS Gatekeeper may block launching it directly. We recommend building from source (`make build`) or right-clicking `LynxBar.app` and choosing **Open**.
+          rm -rf build/dmg-root
+          mkdir -p build/dmg-root
+          ditto "$APP" build/dmg-root/LynxBar.app
+          ln -s /Applications build/dmg-root/Applications
+          DMG="dist/LynxBar-${VERSION}-universal-unsigned.dmg"
+          hdiutil create -volname "LynxBar ${VERSION}" -srcfolder build/dmg-root -ov -format UDZO "$DMG"
 
-          ### Verification
-          ```sh
-          shasum -a 256 -c SHA256SUMS.txt
-          ```
-          EOF
+          (cd dist && shasum -a 256 "LynxBar-${VERSION}-universal-unsigned.dmg" "LynxBar-${VERSION}-universal-unsigned.zip" > SHA256SUMS.txt)
+
+      - name: Generate release notes
+        env:
+          VERSION: ${{ steps.config.outputs.version }}
+          SIGNED: ${{ steps.config.outputs.signed }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+
+          version = os.environ["VERSION"]
+          signed = os.environ["SIGNED"] == "true"
+
+          changelog_section = ""
+          if os.path.exists("CHANGELOG.md"):
+              with open("CHANGELOG.md", encoding="utf-8") as f:
+                  text = f.read()
+              pattern = rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)"
+              match = re.search(pattern, text, flags=re.M | re.S)
+              if match:
+                  changelog_section = match.group(1).strip()
+
+          suffix = "" if signed else "-unsigned"
+          dmg_name = f"LynxBar-{version}-universal{suffix}.dmg"
+          zip_name = f"LynxBar-{version}-universal{suffix}.zip"
+          signing_label = "Developer ID signed & notarized" if signed else "Ad-hoc / Unsigned"
+
+          lines = [f"## LynxBar v{version}", ""]
+          if not signed:
+              lines += [
+                  "> **Unsigned Release Notice**: Apple Developer signing secrets were not configured for this build, so the artifacts below are ad-hoc signed and unnotarized.",
+                  "> After dragging `LynxBar.app` to `/Applications`, clear macOS quarantine once before launching (or build directly from source with `make build`):",
+                  "> ```sh",
+                  "> xattr -dr com.apple.quarantine /Applications/LynxBar.app",
+                  "> ```",
+                  "",
+              ]
+          else:
+              lines += [
+                  "Signed with Developer ID, notarized by Apple, and stapled for **macOS 13.0+ (Universal: Apple Silicon & Intel)**.",
+                  "",
+              ]
+
+          lines += [
+              "### Downloads",
+              "",
+              "| Artifact | Format | Architecture | Signing |",
+              "| --- | --- | --- | --- |",
+              f"| `{dmg_name}` | Drag-to-Applications DMG | Universal (`arm64` + `x86_64`) | {signing_label} |",
+              f"| `{zip_name}` | Direct `.app` ZIP archive | Universal (`arm64` + `x86_64`) | {signing_label} |",
+              "| `SHA256SUMS.txt` | SHA-256 checksums | — | — |",
+              "",
+              "### Verify Checksums",
+              "```sh",
+              "shasum -a 256 -c SHA256SUMS.txt",
+              "```",
+              "",
+          ]
+
+          if changelog_section:
+              lines += ["### What's Changed", "", changelog_section, ""]
+
+          os.makedirs("build", exist_ok=True)
+          with open("build/release-notes.md", "w", encoding="utf-8") as out:
+              out.write("\n".join(lines))
+          PY
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -294,4 +404,6 @@ jobs:
           tag_name: ${{ steps.config.outputs.tag }}
           name: LynxBar ${{ steps.config.outputs.tag }}
           body_path: build/release-notes.md
+          prerelease: ${{ steps.config.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.config.outputs.prerelease != 'true' }}
           files: dist/*

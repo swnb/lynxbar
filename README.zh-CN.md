@@ -88,7 +88,18 @@
 ## 安装指南
 
 ### 系统要求
-- **macOS 13.0 (Ventura)** 及以上版本
+- **macOS 13.0 (Ventura)** 及以上版本（**Universal 通用二进制**：同时支持 Apple Silicon 与 Intel）
+
+### GitHub Releases（推荐）
+直接前往 **[GitHub Releases（最新版）](https://github.com/swnb/lynxbar/releases/latest)** 下载通用安装包：
+- **`LynxBar-<version>-universal.dmg`** / **`.zip`** — 已签名公证的 Developer ID 通用安装包（配置 Apple 签名密钥时产出）
+- **`LynxBar-<version>-universal-unsigned.dmg`** / **`.zip`** — ad-hoc 未公证回退通用安装包（附带 `SHA256SUMS.txt` 校验和）
+
+将 `LynxBar.app` 拖入 `/Applications` 后，可用 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。如果下载的是**未签名（unsigned）**版本，首次启动前需解除一次 macOS Gatekeeper 隔离属性：
+
+```sh
+xattr -dr com.apple.quarantine /Applications/LynxBar.app
+```
 
 ### Homebrew Cask
 使用仓库内的 Cask 描述文件安装（或发布至 Tap 后直接安装）：
@@ -97,12 +108,7 @@
 brew install --cask ./Casks/lynxbar.rb
 ```
 
-*（如安装未公证的构建版本，请附加 `--no-quarantine` 参数，或在首次打开时右键点击 **LynxBar.app → 打开**。）*
-
-### GitHub Releases
-前往 [GitHub Releases](https://github.com/swnb/lynxbar/releases) 下载对应版本产物：
-- `LynxBar-<version>.dmg` — 已签名公证的 Developer ID 镜像（当配置了签名密钥时提供）
-- `LynxBar-<version>-unsigned.zip` — 未签名/ad-hoc 回退压缩包（附带 `SHA256SUMS.txt` 校验和）
+*（未签名版本请附加 `--no-quarantine` 参数。）*
 
 ### 从源码编译
 需要安装包含 **Swift 6** 的 Xcode 与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)（`2.46.0` 或更高版本）：
