@@ -177,13 +177,13 @@ final class ProcessViewModelTests: XCTestCase {
         settings.processTopN = 5
 
         let totalProcesses = 30
-        var raws: [ProcessProvider.RawProcess] = []
-        raws.reserveCapacity(totalProcesses)
+        var builtRaws: [ProcessProvider.RawProcess] = []
+        builtRaws.reserveCapacity(totalProcesses)
         for index in 0..<totalProcesses {
             let pid = Int32(1_000 + index)
             let startTime = UInt64(5_000 + index)
             let memoryBytes = UInt64(totalProcesses - index) * 1_024
-            raws.append(
+            builtRaws.append(
                 ProcessProvider.RawProcess(
                     identity: ProcessProvider.ProcessIdentity(
                         pid: pid,
@@ -196,6 +196,7 @@ final class ProcessViewModelTests: XCTestCase {
                 )
             )
         }
+        let raws = builtRaws
 
         var resolveCount = 0
         let nameCache = ProcessDisplayNameCache(resolve: { _ in
