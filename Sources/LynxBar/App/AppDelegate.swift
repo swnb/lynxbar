@@ -33,18 +33,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MonitoringDemandOwner 
     private var visualQATokens: [DemandToken] = []
 #endif
 
-    private let settings = Settings.shared
+    private let settings: Settings
     private let demandCoordinator: MonitoringDemandCoordinator
-    private let cpu = CPUViewModel(settings: Settings.shared)
-    private let memory = MemoryViewModel(settings: Settings.shared)
-    private let disk = DiskViewModel(settings: Settings.shared)
-    private let network = NetworkViewModel(settings: Settings.shared)
-    private let gpu = GPUViewModel(settings: Settings.shared)
-    private let battery = BatteryViewModel(settings: Settings.shared)
-    private let process = ProcessViewModel(settings: Settings.shared)
-    private let thermal = ThermalViewModel(settings: Settings.shared)
-    private let accessoryPower = AccessoryPowerViewModel(settings: Settings.shared)
-    private let aiUsage = AIUsageViewModel(settings: Settings.shared)
+    private let cpu: CPUViewModel
+    private let memory: MemoryViewModel
+    private let disk: DiskViewModel
+    private let network: NetworkViewModel
+    private let gpu: GPUViewModel
+    private let battery: BatteryViewModel
+    private let process: ProcessViewModel
+    private let thermal: ThermalViewModel
+    private let accessoryPower: AccessoryPowerViewModel
+    private let aiUsage: AIUsageViewModel
     private let processRemediationCoordinator: RemediationCoordinator
     /// 保持动作验证 bridge 的宿主寿命；sheet 不持有模块 demand token。
     private let processRemediationDemandBridge: RemediationDemandBridge
@@ -64,9 +64,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MonitoringDemandOwner 
     // 初值直接取 isRunningUnderXCTest,避免可点击性永远卡在 false。
     private var isHistoryLoaded = AppDelegate.isRunningUnderXCTest
 
+    /// Initializes the shared demand coordinator, monitoring view models, and remediation bridges.
+    /// View models are constructed explicitly inside `init()` rather than as inline stored-property
+    /// initializers to avoid a Swift 6.1.2 (Xcode 16.4) SILGen crash on default `@Sendable` closures.
     override init() {
+        let settings = Settings.shared
+        self.settings = settings
         let demandCoordinator = MonitoringDemandCoordinator()
         self.demandCoordinator = demandCoordinator
+        self.cpu = CPUViewModel(settings: settings)
+        self.memory = MemoryViewModel(settings: settings)
+        self.disk = DiskViewModel(settings: settings)
+        self.network = NetworkViewModel(settings: settings)
+        self.gpu = GPUViewModel(settings: settings)
+        self.battery = BatteryViewModel(settings: settings)
+        self.process = ProcessViewModel(settings: settings)
+        self.thermal = ThermalViewModel(settings: settings)
+        self.accessoryPower = AccessoryPowerViewModel(settings: settings)
+        self.aiUsage = AIUsageViewModel(settings: settings)
         self.diskCleanup = DiskCleanupFeature(demandCoordinator: demandCoordinator)
         let processBridge = RemediationDemandBridge(demandCoordinator: demandCoordinator)
         self.processRemediationDemandBridge = processBridge
