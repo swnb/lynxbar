@@ -90,25 +90,29 @@
 ### 系统要求
 - **macOS 13.0 (Ventura)** 及以上版本（**Universal 通用二进制**：同时支持 Apple Silicon 与 Intel）
 
-### GitHub Releases（推荐）
+### Homebrew 一键安装（推荐）
+通过官方独立 Tap 一行命令安装（自动校验 `SHA-256` 并清除 macOS 隔离属性，装完直接打开、零弹窗）：
+
+```sh
+brew install --cask swnb/tap/lynxbar
+```
+
+后续升级：
+
+```sh
+brew upgrade --cask swnb/tap/lynxbar
+```
+
+### GitHub Releases（手动下载）
 直接前往 **[GitHub Releases（最新版）](https://github.com/swnb/lynxbar/releases/latest)** 下载通用安装包：
 - **`LynxBar-<version>-universal.dmg`** / **`.zip`** — 已签名公证的 Developer ID 通用安装包（配置 Apple 签名密钥时产出）
-- **`LynxBar-<version>-universal-unsigned.dmg`** / **`.zip`** — ad-hoc 未公证回退通用安装包（附带 `SHA256SUMS.txt` 校验和）
+- **`LynxBar-<version>-universal-unsigned.dmg`** / **`.zip`** — 社区免费 ad-hoc 通用安装包（附带 `SHA256SUMS.txt` 校验和）
 
-将 `LynxBar.app` 拖入 `/Applications` 后，可用 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。如果下载的是**未签名（unsigned）**版本，首次启动前需解除一次 macOS Gatekeeper 隔离属性：
-
-```sh
-xattr -dr com.apple.quarantine /Applications/LynxBar.app
-```
-
-### Homebrew Cask
-使用仓库内的 Cask 描述文件安装（或发布至 Tap 后直接安装）：
+将 `LynxBar.app` 拖入 `/Applications` 后，可用 `shasum -a 256 -c SHA256SUMS.txt` 校验完整性。如果通过浏览器下载了**未签名（unsigned）**版本，首次启动前执行一次以下命令解除 macOS Gatekeeper 隔离属性即可：
 
 ```sh
-brew install --cask ./Casks/lynxbar.rb
+xattr -cr /Applications/LynxBar.app
 ```
-
-*（未签名版本请附加 `--no-quarantine` 参数。）*
 
 ### 从源码编译
 需要安装包含 **Swift 6** 的 Xcode 与 [XcodeGen](https://github.com/yonaskolb/XcodeGen)（`2.46.0` 或更高版本）：

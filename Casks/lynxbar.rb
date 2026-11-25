@@ -1,20 +1,28 @@
 cask "lynxbar" do
   version "0.1.0"
-  # Pin the exact SHA256 from SHA256SUMS.txt once the v0.1.0 signed DMG is published.
-  sha256 :no_check
+  sha256 "c846a06609bf26a185e454b138d279fa4ce3418df727b9f97af3858c0308b9ab"
 
-  url "https://github.com/swnb/lynxbar/releases/download/v#{version}/LynxBar-#{version}-universal.dmg"
+  url "https://github.com/swnb/lynxbar/releases/download/v#{version}/LynxBar-#{version}-universal-unsigned.dmg"
   name "LynxBar"
-  desc "macOS menu bar system monitor"
+  desc "Native, privacy-first macOS menu bar system monitor and AI quota tracker"
   homepage "https://github.com/swnb/lynxbar"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
 
   depends_on macos: ">= :ventura"
 
-  # Notarized and stapled; Gatekeeper opens directly
   app "LynxBar.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/LynxBar.app"]
+  end
+
   zap trash: [
-    "~/Library/Preferences/com.swnb.LynxBar.plist",
     "~/Library/Application Support/LynxBar",
+    "~/Library/Preferences/com.swnb.LynxBar.plist",
   ]
 end
