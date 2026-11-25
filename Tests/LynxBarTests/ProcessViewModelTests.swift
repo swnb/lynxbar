@@ -177,16 +177,23 @@ final class ProcessViewModelTests: XCTestCase {
         settings.processTopN = 5
 
         let totalProcesses = 30
-        let raws: [ProcessProvider.RawProcess] = (0..<totalProcesses).map { index in
-            ProcessProvider.RawProcess(
-                identity: ProcessProvider.ProcessIdentity(
-                    pid: Int32(1_000 + index),
-                    startTime: UInt64(5_000 + index)
-                ),
-                name: "proc\(index)",
-                cpuTimeNs: UInt64(index),
-                prevCpuTimeNs: nil,
-                memoryBytes: UInt64(totalProcesses - index) * 1_024
+        var raws: [ProcessProvider.RawProcess] = []
+        raws.reserveCapacity(totalProcesses)
+        for index in 0..<totalProcesses {
+            let pid = Int32(1_000 + index)
+            let startTime = UInt64(5_000 + index)
+            let memoryBytes = UInt64(totalProcesses - index) * 1_024
+            raws.append(
+                ProcessProvider.RawProcess(
+                    identity: ProcessProvider.ProcessIdentity(
+                        pid: pid,
+                        startTime: startTime
+                    ),
+                    name: "proc\(index)",
+                    cpuTimeNs: UInt64(index),
+                    prevCpuTimeNs: nil,
+                    memoryBytes: memoryBytes
+                )
             )
         }
 
