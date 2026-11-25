@@ -1,0 +1,83 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in LynxBar
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue in **LynxBar**!
+        **Privacy reminder:** Never paste OAuth tokens, `Authorization` headers, raw macOS Keychain dumps, `~/.claude/.credentials.json` contents, or personal file paths/IPs into public issues. If you found a security vulnerability, please report it privately via [Security Advisories](https://github.com/swnb/lynxbar/security/advisories).
+
+  - type: input
+    id: lynxbar_version
+    attributes:
+      label: LynxBar Version
+      description: e.g. 0.1.0 (from About LynxBar or release tag)
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos_version
+    attributes:
+      label: macOS Version & Architecture
+      description: e.g. macOS 15.3 (Apple Silicon) or macOS 14.7 (Intel)
+      placeholder: "macOS 15.x (Apple Silicon)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Installation Method
+      options:
+        - Homebrew Cask
+        - GitHub Release (DMG)
+        - GitHub Release (Unsigned ZIP)
+        - Built from source (Xcode / make)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      options:
+        - Menu Bar & Overview
+        - CPU / Memory / Thermal
+        - Disk & Trash-Safe Cleanup
+        - Network / Public IP
+        - GPU / Battery / Accessories
+        - Processes & Remediation
+        - AI Quota (Claude)
+        - Settings & Appearance
+        - Build / Packaging / Localization
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Clear steps to trigger the issue
+      placeholder: |
+        1. Open LynxBar from the menu bar
+        2. Navigate to ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs. Actual Behavior
+      description: What did you expect to happen, and what happened instead?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: privacy_check
+    attributes:
+      label: Privacy & Redaction Check
+      options:
+        - label: I confirmed no OAuth tokens, Keychain data, passwords, or private IPs/paths are included above.
+          required: true

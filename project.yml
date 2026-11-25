@@ -1,0 +1,82 @@
+name: LynxBar
+options:
+  bundleIdPrefix: com.swnb
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  knownRegions:
+    - en
+    - zh-Hans
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_EMIT_LOC_STRINGS: YES
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: YES
+    COMBINE_HIDPI_IMAGES: YES
+targets:
+  LynxBar:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: Sources/LynxBar
+    dependencies:
+      - sdk: IOKit.framework
+      - sdk: Metal.framework
+      - sdk: GameController.framework
+      - sdk: CoreBluetooth.framework
+      - sdk: Security.framework
+    settings:
+      base:
+        PRODUCT_NAME: LynxBar
+        PRODUCT_BUNDLE_IDENTIFIER: com.swnb.LynxBar
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: Sources/LynxBar/Resources/LynxBar.entitlements
+    info:
+      path: Sources/LynxBar/Resources/Info.plist
+      properties:
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleDisplayName: LynxBar
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHighResolutionCapable: true
+        NSBluetoothAlwaysUsageDescription: "LynxBar reads the standard Bluetooth Battery Service only after you enable accessory battery discovery."
+        NSHumanReadableCopyright: "Open source — MIT"
+  LynxBarTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests/LynxBarTests
+    dependencies:
+      - target: LynxBar
+      - target: LynxBarProcessQAHelper
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.swnb.LynxBarTests
+        GENERATE_INFOPLIST_FILE: YES
+
+  LynxBarProcessQAHelper:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/LynxBarProcessQAHelper
+    settings:
+      base:
+        PRODUCT_NAME: LynxBar Process QA Helper
+        PRODUCT_BUNDLE_IDENTIFIER: com.swnb.LynxBar.ProcessQAHelper
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: NO
+        SKIP_INSTALL: YES

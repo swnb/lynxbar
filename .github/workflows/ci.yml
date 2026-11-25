@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Verify localization parity
+        run: |
+          plutil -lint \
+            Sources/LynxBar/Resources/en.lproj/Localizable.strings \
+            Sources/LynxBar/Resources/zh-Hans.lproj/Localizable.strings
+          python3 - <<'PY'
+          import plistlib
+          import re
+          import subprocess
+          import sys
+
+          en_path = "Sources/LynxBar/Resources/en.lproj/Localizable.strings"
+          zh_path = "Sources/LynxBar/Resources/zh-Hans.lproj/Localizable.strings"
+
+          def find_duplicates(path: str) -> list[str]:
+              with open(path, encoding="utf-8") as f:
+                  text = f.read()
+              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+              text = re.sub(r"//.*", "", text)
+              keys = re.findall(r'"((?:\\.|[^"\\])*)"\s*=', text)
+              seen: set[str] = set()
+              dups: list[str] = []
+              for key in keys:
+                  if key in seen:
+                      dups.append(key)
+                  seen.add(key)
+              return dups
+
+          def load_strings(path: str) -> dict[str, str]:
+              xml = subprocess.check_output(["plutil", "-convert", "xml1", "-o", "-", path])
+              return plistlib.loads(xml)
+
+          for path in (en_path, zh_path):
+              dups = find_duplicates(path)
+              if dups:
+                  print(f"Duplicate localization keys in {path}: {dups}", file=sys.stderr)
+                  sys.exit(1)
+
+          en = load_strings(en_path)
+          zh = load_strings(zh_path)
+          only_en = sorted(set(en) - set(zh))
+          only_zh = sorted(set(zh) - set(en))
+          if only_en or only_zh:
+              print(f"Missing in zh-Hans: {only_en}", file=sys.stderr)
+              print(f"Missing in en: {only_zh}", file=sys.stderr)
+              sys.exit(1)
+
+          spec_re = re.compile(r"%(?:\d+\$)?(?:\.\d+)?(?:ll|l)?[@difuxs]|%%")
+          mismatches = []
+          for key in sorted(en):
+              en_specs = sorted(m.group(0) for m in spec_re.finditer(en[key]) if m.group(0) != "%%")
+              zh_specs = sorted(m.group(0) for m in spec_re.finditer(zh[key]) if m.group(0) != "%%")
+              if en_specs != zh_specs:
+                  mismatches.append((key, en_specs, zh_specs))
+          if mismatches:
+              print(f"Format specifier mismatches: {mismatches}", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Localization parity OK: {len(en)} aligned keys, 0 duplicates, 0 specifier mismatches.")
+          PY
+
+      - name: Build for testing (0-warning gate)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project LynxBar.xcodeproj \
+            -scheme LynxBar \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee build.log
+
+      # This gate deliberately inspects build.log from the cold build-for-testing
+      # step above rather than invoking xcodebuild a second time. Running a second
+      # xcodebuild in the same job would hit DerivedData incremental caches and
+      # silently suppress compiler warnings on unchanged targets. Because this
+      # workflow does not cache DerivedData, build-for-testing is guaranteed to be
+      # a cold build across all source and test targets. If DerivedData caching is
+      # ever added later, restore an explicit clean build before checking warnings.
+      - name: Fail on warnings
+        run: |
+          if grep -q ": warning:" build.log; then
+            echo "::error::Build emitted compiler warnings; zero-warning baseline is required."
+            grep ": warning:" build.log | sort -u
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project LynxBar.xcodeproj \
+            -scheme LynxBar \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building

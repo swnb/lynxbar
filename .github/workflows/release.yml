@@ -1,0 +1,297 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example, 0.1.0); defaults to tag or project.yml version"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Verify localization parity
+        run: |
+          plutil -lint \
+            Sources/LynxBar/Resources/en.lproj/Localizable.strings \
+            Sources/LynxBar/Resources/zh-Hans.lproj/Localizable.strings
+          python3 - <<'PY'
+          import plistlib
+          import re
+          import subprocess
+          import sys
+
+          en_path = "Sources/LynxBar/Resources/en.lproj/Localizable.strings"
+          zh_path = "Sources/LynxBar/Resources/zh-Hans.lproj/Localizable.strings"
+
+          def find_duplicates(path: str) -> list[str]:
+              with open(path, encoding="utf-8") as f:
+                  text = f.read()
+              text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+              text = re.sub(r"//.*", "", text)
+              keys = re.findall(r'"((?:\\.|[^"\\])*)"\s*=', text)
+              seen: set[str] = set()
+              dups: list[str] = []
+              for key in keys:
+                  if key in seen:
+                      dups.append(key)
+                  seen.add(key)
+              return dups
+
+          def load_strings(path: str) -> dict[str, str]:
+              xml = subprocess.check_output(["plutil", "-convert", "xml1", "-o", "-", path])
+              return plistlib.loads(xml)
+
+          for path in (en_path, zh_path):
+              dups = find_duplicates(path)
+              if dups:
+                  print(f"Duplicate localization keys in {path}: {dups}", file=sys.stderr)
+                  sys.exit(1)
+
+          en = load_strings(en_path)
+          zh = load_strings(zh_path)
+          only_en = sorted(set(en) - set(zh))
+          only_zh = sorted(set(zh) - set(en))
+          if only_en or only_zh:
+              print(f"Missing in zh-Hans: {only_en}", file=sys.stderr)
+              print(f"Missing in en: {only_zh}", file=sys.stderr)
+              sys.exit(1)
+
+          spec_re = re.compile(r"%(?:\d+\$)?(?:\.\d+)?(?:ll|l)?[@difuxs]|%%")
+          mismatches = []
+          for key in sorted(en):
+              en_specs = sorted(m.group(0) for m in spec_re.finditer(en[key]) if m.group(0) != "%%")
+              zh_specs = sorted(m.group(0) for m in spec_re.finditer(zh[key]) if m.group(0) != "%%")
+              if en_specs != zh_specs:
+                  mismatches.append((key, en_specs, zh_specs))
+          if mismatches:
+              print(f"Format specifier mismatches: {mismatches}", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Localization parity OK: {len(en)} aligned keys.")
+          PY
+
+      - name: Build for testing (0-warning gate)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project LynxBar.xcodeproj \
+            -scheme LynxBar \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee build.log
+
+      - name: Fail on warnings
+        run: |
+          if grep -q ": warning:" build.log; then
+            echo "::error::Build emitted compiler warnings; zero-warning baseline is required."
+            grep ": warning:" build.log | sort -u
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project LynxBar.xcodeproj \
+            -scheme LynxBar \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building
+
+      - name: Resolve release configuration
+        id: config
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [[ -n "$INPUT_VERSION" ]]; then
+            VERSION="${INPUT_VERSION#v}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(awk -F'"' '/MARKETING_VERSION:/ { print $2; exit }' project.yml)"
+            VERSION="${VERSION:-0.1.0}"
+          fi
+
+          if [[ -n "$APPLE_CERTIFICATE_P12" && -n "$APPLE_CERTIFICATE_PASSWORD" && -n "$APPLE_TEAM_ID" && -n "$APPLE_ID" && -n "$APPLE_APP_PASSWORD" ]]; then
+            SIGNED="true"
+          else
+            SIGNED="false"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "signed=$SIGNED" >> "$GITHUB_OUTPUT"
+          echo "Release version=$VERSION signed=$SIGNED"
+
+      - name: Import Developer ID certificate
+        if: steps.config.outputs.signed == 'true'
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          mkdir -p build
+          KEYCHAIN_PATH="$PWD/build/signing.keychain-db"
+          CERT_PATH="$PWD/build/certificate.p12"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "CERT_PATH=$CERT_PATH" >> "$GITHUB_ENV"
+
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+      - name: Archive, export, notarize, and package signed DMG
+        if: steps.config.outputs.signed == 'true'
+        env:
+          VERSION: ${{ steps.config.outputs.version }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -o pipefail
+          mkdir -p build dist
+
+          cat > build/exportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>method</key>
+          	<string>developer-id</string>
+          	<key>teamID</key>
+          	<string>${APPLE_TEAM_ID}</string>
+          	<key>signingStyle</key>
+          	<string>manual</string>
+          	<key>signingCertificate</key>
+          	<string>Developer ID Application</string>
+          </dict>
+          </plist>
+          EOF
+          plutil -lint build/exportOptions.plist
+
+          xcodebuild \
+            -project LynxBar.xcodeproj \
+            -scheme LynxBar \
+            -configuration Release \
+            -archivePath build/LynxBar.xcarchive \
+            MARKETING_VERSION="$VERSION" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            archive
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/LynxBar.xcarchive \
+            -exportOptionsPlist build/exportOptions.plist \
+            -exportPath build/export
+
+          APP="build/export/LynxBar.app"
+          [[ -d "$APP" ]] || { echo "Missing exported app at $APP"; exit 1; }
+
+          ditto -c -k --keepParent "$APP" build/LynxBar-notarize.zip
+          xcrun notarytool submit build/LynxBar-notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+
+          DMG="dist/LynxBar-${VERSION}.dmg"
+          hdiutil create -volname LynxBar -srcfolder "$APP" -ov -fs APFS "$DMG"
+          (cd dist && shasum -a 256 "LynxBar-${VERSION}.dmg" > SHA256SUMS.txt)
+
+          printf '## LynxBar v%s\n\n' "$VERSION" > build/release-notes.md
+          cat <<'EOF' >> build/release-notes.md
+          Signed with Developer ID, notarized, and stapled for macOS 13+.
+
+          ### Verification
+          ```sh
+          shasum -a 256 -c SHA256SUMS.txt
+          ```
+          EOF
+
+      - name: Clean up temporary keychain
+        if: always() && steps.config.outputs.signed == 'true'
+        run: |
+          if [[ -n "${KEYCHAIN_PATH:-}" && -f "${KEYCHAIN_PATH}" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -f "${CERT_PATH:-}" build/exportOptions.plist
+
+      - name: Build unsigned fallback archive
+        if: steps.config.outputs.signed != 'true'
+        env:
+          VERSION: ${{ steps.config.outputs.version }}
+        run: |
+          set -o pipefail
+          mkdir -p build dist
+
+          xcodebuild \
+            -project LynxBar.xcodeproj \
+            -scheme LynxBar \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/release-dd \
+            MARKETING_VERSION="$VERSION" \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=YES \
+            build
+
+          APP="build/release-dd/Build/Products/Release/LynxBar.app"
+          [[ -d "$APP" ]] || { echo "Missing built app at $APP"; exit 1; }
+
+          ZIP="dist/LynxBar-${VERSION}-unsigned.zip"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          (cd dist && shasum -a 256 "LynxBar-${VERSION}-unsigned.zip" > SHA256SUMS.txt)
+
+          printf '## LynxBar v%s (Unsigned Build)\n\n' "$VERSION" > build/release-notes.md
+          cat <<'EOF' >> build/release-notes.md
+          > **Notice**: This archive is **unsigned and unnotarized** because Apple Developer signing secrets were not configured for this workflow run.
+          > macOS Gatekeeper may block launching it directly. We recommend building from source (`make build`) or right-clicking `LynxBar.app` and choosing **Open**.
+
+          ### Verification
+          ```sh
+          shasum -a 256 -c SHA256SUMS.txt
+          ```
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.config.outputs.tag }}
+          name: LynxBar ${{ steps.config.outputs.tag }}
+          body_path: build/release-notes.md
+          files: dist/*

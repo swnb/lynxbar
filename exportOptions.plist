@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Export method: Developer ID for direct distribution outside the Mac App Store -->
+	<key>method</key>
+	<string>developer-id</string>
+
+	<!-- Replace with your Apple Developer Team ID (https://developer.apple.com/account) -->
+	<key>teamID</key>
+	<string>TEAM_ID_PLACEHOLDER</string>
+
+	<key>signingStyle</key>
+	<string>automatic</string>
+</dict>
+</plist>
