@@ -7,16 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
 ### Added
+- **macOS Native Glass UI Refresh**: Upgraded the `420×600` panel with `VisualEffectBackdrop`, `0.5pt` hairlines, continuous corners, `V2Card(accentTint:)`, `LynxProgressBar`, `LynxSegmentedPill`, `LynxActionPillButton`, and gradient-filled live charts with glowing head markers.
 - **Multi-Provider AI Subscription Quota (`Claude`, `OpenAI Codex`, `Antigravity`) powered by `CodexBarCore` (MIT)**:
   - Integrated `CodexBarCore` (`v0.85.0`, MIT) via SwiftPM with `CodexBarUsageProvider` (`cookieSource = .off`, `webExtrasEnabled = false`, `desktopCookiesEnabled = false`), replacing the sunset consumer Gemini CLI provider with **Antigravity** (`agy login` / local app & CLI probes) alongside **Claude** and **OpenAI Codex**.
-  - Added independent opt-in toggles (`claudeUsageEnabled`, `codexUsageEnabled`, `antigravityUsageEnabled`, all defaulting to `false`) with isolated per-provider polling, cooldown, single-flight deduplication, `429` backoff, and stale-while-error retention in `AIUsageViewModel`, plus persistent CLI session cleanup on app termination.
-  - Upgraded `AIUsagePanelView` to simultaneous multi-card display using `V2Card`, `LynxProgressBar`, `LynxActionPillButton`, `LynxSegmentedPill`, and per-provider CLI login remediation (`claude /login`, `codex login`, `agy login`).
-  - Extended `OverviewAIQuotaRow` (`36pt` height preserved within the `420×600` budget) and `MenuBarStatusModel` / `MenuBarStatusPresenter` (`132pt` Focus / `300pt` Compact width budgets, `900s` TTL, bilingual VoiceOver announcements naming all active providers).
+  - Added independent opt-in toggles (`claudeUsageEnabled`, `codexUsageEnabled`, `antigravityUsageEnabled`, all defaulting to `false`) with isolated per-provider polling, cooldown, single-flight deduplication, `429` backoff, stale-while-error retention, `LoginShellPathCache` warmup, and persistent CLI session cleanup on app termination.
+  - Upgraded `AIUsagePanelView` to simultaneous multi-card display with per-provider CLI login remediation (`claude /login`, `codex login`, `agy login`), extended `OverviewAIQuotaRow` (`36pt` height within the `420×600` budget), and updated `MenuBarStatusModel` / `MenuBarStatusPresenter` (`132pt` Focus / `300pt` Compact width budgets, `900s` TTL, bilingual VoiceOver announcements).
   - Updated `SettingsView` Privacy toggles and bilingual `en` / `zh-Hans` localization strings.
+- **Overview Multi-Issue Switcher**: Added an inline `1/N ▸` pager pill in the Overview attention banner when multiple health issues are active so users can inspect and jump to any active issue directly.
+- **Disk & Memory Product Polish**: Promoted safe Disk Cleanup CTA, added elevated/high Swap alerts in Memory, and unified card/bar visual alignment across Overview, Disk, Memory, and AI onboarding.
 
 ### Changed
 - Raised minimum macOS deployment target from `macOS 13.0` to `macOS 14.0` to support `CodexBarCore`.
+- Upgraded GitHub Actions CI & Release workflows to `macos-26` (Xcode 26) and migrated Swift Charts / SwiftUI modifiers to macOS 14 APIs (`plotFrame`, two-parameter `onChange`) to maintain a zero-warning build gate.
+
+### Fixed
+- Anchored `SystemHealthEvaluator`'s 30-second sustained CPU window to the latest fresh sample timestamp so wall-clock jitter between sampling ticks no longer causes the Overview attention card to flicker between CPU and Disk alerts.
+- Fixed horizontal staircase misalignment in `AIUsagePanelView` onboarding rows and `SettingsView` toggle labels.
+- Fixed `CodexBarUsageProvider` offline fallback snapshots to surface underlying live probe failures instead of generic decoding errors.
 
 ## [0.1.0] - 2026-11-25
 
