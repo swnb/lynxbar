@@ -203,59 +203,61 @@ struct NetworkThroughputChart: View {
                 }
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
-                        let plotFrame = geometry[proxy.plotAreaFrame]
-                        let dataFrame = Self.plotInsets.dataRect(in: plotFrame)
-                        ZStack(alignment: .topLeading) {
-                            ContinuousChartCanvas(
-                                series: [
-                                    ContinuousChartCanvasSeries(
-                                        frame: downPlayback.frame(at: playhead),
-                                        style: ContinuousChartSeriesStyle(
-                                            color: Theme.networkInput,
-                                            areaOpacity: 0.15,
-                                            lineWidth: 1.8,
-                                            markerDiameter: 5.5
-                                        )
-                                    ),
-                                    ContinuousChartCanvasSeries(
-                                        frame: upPlayback.frame(at: playhead),
-                                        style: ContinuousChartSeriesStyle(
-                                            color: Theme.networkOutput,
-                                            areaOpacity: 0,
-                                            lineWidth: 1.8,
-                                            markerDiameter: 5.5
-                                        )
-                                    ),
-                                ],
-                                xDomain: relativeXDomain,
-                                yDomain: displayedYDomain,
-                                plotInsets: Self.plotInsets
-                            )
-                            .frame(width: plotFrame.width, height: plotFrame.height)
-                            .position(x: plotFrame.midX, y: plotFrame.midY)
-
-                            if let selection = presentedSelection(
-                                at: hoverDomainEnd(for: playhead)
-                            ) {
-                                NetworkPlaybackSelectionOverlay(
-                                    selection: selection,
-                                    domainEnd: hoverDomainEnd(for: playhead),
-                                    plotFrame: dataFrame,
+                        if let plotAnchor = proxy.plotFrame {
+                            let plotFrame = geometry[plotAnchor]
+                            let dataFrame = Self.plotInsets.dataRect(in: plotFrame)
+                            ZStack(alignment: .topLeading) {
+                                ContinuousChartCanvas(
+                                    series: [
+                                        ContinuousChartCanvasSeries(
+                                            frame: downPlayback.frame(at: playhead),
+                                            style: ContinuousChartSeriesStyle(
+                                                color: Theme.networkInput,
+                                                areaOpacity: 0.15,
+                                                lineWidth: 1.8,
+                                                markerDiameter: 5.5
+                                            )
+                                        ),
+                                        ContinuousChartCanvasSeries(
+                                            frame: upPlayback.frame(at: playhead),
+                                            style: ContinuousChartSeriesStyle(
+                                                color: Theme.networkOutput,
+                                                areaOpacity: 0,
+                                                lineWidth: 1.8,
+                                                markerDiameter: 5.5
+                                            )
+                                        ),
+                                    ],
                                     xDomain: relativeXDomain,
-                                    yDomain: displayedYDomain
+                                    yDomain: displayedYDomain,
+                                    plotInsets: Self.plotInsets
                                 )
-                            }
+                                .frame(width: plotFrame.width, height: plotFrame.height)
+                                .position(x: plotFrame.midX, y: plotFrame.midY)
 
-                            Rectangle()
-                                .fill(.clear)
-                                .contentShape(Rectangle())
-                                .onContinuousHover { phase in
-                                    updateSelection(
-                                        phase,
+                                if let selection = presentedSelection(
+                                    at: hoverDomainEnd(for: playhead)
+                                ) {
+                                    NetworkPlaybackSelectionOverlay(
+                                        selection: selection,
+                                        domainEnd: hoverDomainEnd(for: playhead),
                                         plotFrame: dataFrame,
-                                        domainEnd: hoverDomainEnd(for: playhead)
+                                        xDomain: relativeXDomain,
+                                        yDomain: displayedYDomain
                                     )
                                 }
+
+                                Rectangle()
+                                    .fill(.clear)
+                                    .contentShape(Rectangle())
+                                    .onContinuousHover { phase in
+                                        updateSelection(
+                                            phase,
+                                            plotFrame: dataFrame,
+                                            domainEnd: hoverDomainEnd(for: playhead)
+                                        )
+                                    }
+                            }
                         }
                     }
                 }
@@ -266,13 +268,13 @@ struct NetworkThroughputChart: View {
         .onAppear {
             resetPlayback()
         }
-        .onChange(of: sampleSignature) { _ in
+        .onChange(of: sampleSignature) {
             ingestLatest()
         }
-        .onChange(of: range) { _ in
+        .onChange(of: range) {
             resetPlayback()
         }
-        .onChange(of: cadenceHint) { _ in
+        .onChange(of: cadenceHint) {
             resetPlayback()
         }
         .accessibilityElement(children: .ignore)

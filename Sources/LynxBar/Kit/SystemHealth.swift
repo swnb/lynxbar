@@ -58,6 +58,7 @@ struct SystemHealthSummary: Sendable, Equatable {
 
 enum SystemHealthEvaluator {
     static let cpuWindow: TimeInterval = 30
+    static let cpuFreshnessTolerance: TimeInterval = 10
     static let cpuAttentionThreshold = 0.85
     static let cpuCriticalThreshold = 0.95
     static let diskAttentionFraction = 0.15
@@ -152,14 +153,20 @@ enum SystemHealthEvaluator {
         return SystemHealthSummary(severity: severity, issues: issues)
     }
 
+    /// Computes the trailing 30-second sustained CPU average anchored to the latest fresh sample
+    /// so wall-clock jitter between sampling ticks cannot momentarily shrink the window span below 90%.
     private static func sustainedCPUAverage(_ samples: [MetricPoint], now: Date) -> Double? {
-        let cutoff = now.addingTimeInterval(-cpuWindow)
-        let window = samples
-            .filter { $0.timestamp >= cutoff && $0.timestamp <= now }
+        let validSamples = samples
+            .filter { $0.timestamp <= now }
             .sorted { $0.timestamp < $1.timestamp }
+        guard let latest = validSamples.last,
+              now.timeIntervalSince(latest.timestamp) <= cpuFreshnessTolerance else {
+            return nil
+        }
+        let cutoff = latest.timestamp.addingTimeInterval(-cpuWindow)
+        let window = validSamples.filter { $0.timestamp >= cutoff }
         guard let first = window.first,
-              let last = window.last,
-              last.timestamp.timeIntervalSince(first.timestamp) >= cpuWindow * 0.9 else {
+              latest.timestamp.timeIntervalSince(first.timestamp) >= cpuWindow * 0.9 else {
             return nil
         }
         return window.map(\.value).reduce(0, +) / Double(window.count)

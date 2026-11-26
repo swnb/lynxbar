@@ -114,29 +114,31 @@ struct PercentHistoryChart: View {
             }
             .chartOverlay { proxy in
                 GeometryReader { geometry in
-                    let plotFrame = geometry[proxy.plotAreaFrame]
-                    TimelineView(.animation(
-                        minimumInterval: 1.0 / 60.0,
-                        paused: timelineIsPaused
-                    )) { context in
-                        ContinuousChartCanvas(
-                            series: [
-                                ContinuousChartCanvasSeries(
-                                    frame: playbackFrame(at: context.date),
-                                    style: ContinuousChartSeriesStyle(
-                                        color: color,
-                                        areaOpacity: 0.18,
-                                        lineWidth: 1.7,
-                                        markerDiameter: 5
-                                    )
-                                ),
-                            ],
-                            xDomain: xDomain,
-                            yDomain: yDomain,
-                            plotInsets: Self.plotInsets
-                        )
-                        .frame(width: plotFrame.width, height: plotFrame.height)
-                        .position(x: plotFrame.midX, y: plotFrame.midY)
+                    if let plotAnchor = proxy.plotFrame {
+                        let plotFrame = geometry[plotAnchor]
+                        TimelineView(.animation(
+                            minimumInterval: 1.0 / 60.0,
+                            paused: timelineIsPaused
+                        )) { context in
+                            ContinuousChartCanvas(
+                                series: [
+                                    ContinuousChartCanvasSeries(
+                                        frame: playbackFrame(at: context.date),
+                                        style: ContinuousChartSeriesStyle(
+                                            color: color,
+                                            areaOpacity: 0.18,
+                                            lineWidth: 1.7,
+                                            markerDiameter: 5
+                                        )
+                                    ),
+                                ],
+                                xDomain: xDomain,
+                                yDomain: yDomain,
+                                plotInsets: Self.plotInsets
+                            )
+                            .frame(width: plotFrame.width, height: plotFrame.height)
+                            .position(x: plotFrame.midX, y: plotFrame.midY)
+                        }
                     }
                 }
             }
@@ -146,13 +148,13 @@ struct PercentHistoryChart: View {
         .onAppear {
             resetPlayback()
         }
-        .onChange(of: sampleSignature) { _ in
+        .onChange(of: sampleSignature) {
             playback.ingest(points: result.points, receivedAt: Date())
         }
-        .onChange(of: result.range) { _ in
+        .onChange(of: result.range) {
             resetPlayback()
         }
-        .onChange(of: cadenceHint) { _ in
+        .onChange(of: cadenceHint) {
             resetPlayback()
         }
         .accessibilityElement(children: .ignore)

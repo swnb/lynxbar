@@ -80,6 +80,27 @@ final class SystemHealthTests: XCTestCase {
         }
     }
 
+    func testSustainedCPUDoesNotFlickerBetweenSamplingTicksWhenDiskIsAlsoCritical() {
+        let cpuSamples = points(value: 0.99, duration: 30)
+        // Simulate wall-clock redraws occurring 0.5s, 2.2s, and 3.5s after the last 2s CPU sample.
+        for lag in [0.0, 0.5, 2.2, 3.5] {
+            var input = healthyInput(cpu: cpuSamples)
+            input.diskTotalBytes = 500 * 1_000_000_000
+            input.diskFreeBytes = 10 * 1_000_000_000
+            input.now = now.addingTimeInterval(lag)
+
+            let summary = SystemHealthEvaluator.evaluate(input)
+            XCTAssertEqual(summary.issues.map(\.kind), [.criticalCPU, .criticalDisk], "Unexpected flicker at lag \(lag)s")
+        }
+    }
+
+    func testStaleCPUHistoryBeyondFreshnessToleranceDoesNotTriggerSustainedRule() {
+        var input = healthyInput(cpu: points(value: 0.99, duration: 30))
+        input.now = now.addingTimeInterval(SystemHealthEvaluator.cpuFreshnessTolerance + 1)
+        let summary = SystemHealthEvaluator.evaluate(input)
+        XCTAssertFalse(summary.issues.contains { $0.kind == .criticalCPU || $0.kind == .sustainedCPU })
+    }
+
     private func healthyInput(cpu: [MetricPoint]) -> SystemHealthInput {
         SystemHealthInput(
             cpuHistory: cpu,

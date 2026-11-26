@@ -237,7 +237,7 @@ struct MemoryPanelView: View {
                 .padding(.vertical, 6)
             }
             .scrollIndicators(.hidden)
-            .onChange(of: compositionExpanded) { expanded in
+            .onChange(of: compositionExpanded) { _, expanded in
                 guard expanded else { return }
                 Task { @MainActor in
                     // Disclosure 自身仍在做高度动画。必须等它完成后按最终高度

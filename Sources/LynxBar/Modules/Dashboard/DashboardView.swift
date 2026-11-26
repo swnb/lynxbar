@@ -153,7 +153,7 @@ struct DashboardView: View {
             )
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: selection)
-        .onChange(of: selection) { newValue in
+        .onChange(of: selection) { _, newValue in
             onSelectionChange(newValue)
         }
         .frame(width: 420, height: 600)

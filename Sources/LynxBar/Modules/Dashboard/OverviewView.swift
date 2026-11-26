@@ -93,6 +93,7 @@ struct OverviewView: View {
     var thermalState: SystemThermalState = .unknown
     @State private var trend: OverviewTrend = .cpu
     @State private var processMetric: ProcessListView.Metric = .cpu
+    @State private var selectedIssueKind: HealthIssueKind?
 
     /// Creates an `OverviewView` with explicit module view models and an optional AI quota view model.
     init(
@@ -295,9 +296,13 @@ struct OverviewView: View {
         }
     }
 
-    /// Card highlighting the highest-priority active health issue with a direct jump to its detail tab.
+    /// Card highlighting the active health issue with a direct jump to its detail tab and an inline switcher when multiple issues exist.
     private var attentionCard: some View {
-        let activeIssue = healthSummary.issues.first
+        let issues = healthSummary.issues
+        let activeIndex = selectedIssueKind.flatMap { kind in
+            issues.firstIndex(where: { $0.kind == kind })
+        } ?? 0
+        let activeIssue = issues.isEmpty ? nil : issues[activeIndex]
         let issueAccent: Color? = activeIssue.map {
             $0.severity == .critical ? Theme.critical : Theme.warning
         }
@@ -319,9 +324,33 @@ struct OverviewView: View {
                         .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(LocalizedStringKey(issueTitle(issue)))
-                                .font(Theme.Font.subheadline.weight(.semibold))
-                                .lineLimit(1)
+                            HStack(spacing: 6) {
+                                Text(LocalizedStringKey(issueTitle(issue)))
+                                    .font(Theme.Font.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+
+                                if issues.count > 1 {
+                                    Button {
+                                        let nextIndex = (activeIndex + 1) % issues.count
+                                        selectedIssueKind = issues[nextIndex].kind
+                                    } label: {
+                                        HStack(spacing: 2) {
+                                            Text("\(activeIndex + 1)/\(issues.count)")
+                                                .monospacedDigit()
+                                            Image(systemName: "chevron.right")
+                                                .font(Theme.Font.micro.weight(.bold))
+                                        }
+                                        .font(Theme.Font.micro.weight(.semibold))
+                                        .foregroundStyle(tint)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(tint.opacity(0.14))
+                                        .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("\(activeIndex + 1)/\(issues.count)")
+                                }
+                            }
                             Text(issueBody(issue))
                                 .font(Theme.Font.micro)
                                 .foregroundStyle(Theme.secondaryInk)
