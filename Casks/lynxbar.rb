@@ -1,6 +1,6 @@
 cask "lynxbar" do
-  version "0.1.0"
-  sha256 "c846a06609bf26a185e454b138d279fa4ce3418df727b9f97af3858c0308b9ab"
+  version "0.2.0"
+  sha256 "3e83b0e1ced545d99e5349c60eae4393c32655b647ea828d03cf11d49aa23432"
 
   url "https://github.com/swnb/lynxbar/releases/download/v#{version}/LynxBar-#{version}-universal-unsigned.dmg"
   name "LynxBar"
@@ -12,7 +12,7 @@ cask "lynxbar" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: ">= :sonoma"
 
   app "LynxBar.app"
 
