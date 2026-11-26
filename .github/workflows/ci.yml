@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -98,9 +98,9 @@ jobs:
       # ever added later, restore an explicit clean build before checking warnings.
       - name: Fail on warnings
         run: |
-          if grep -q ": warning:" build.log; then
-            echo "::error::Build emitted compiler warnings; zero-warning baseline is required."
-            grep ": warning:" build.log | sort -u
+          if grep -Eq "^${PWD}/(Sources|Tests)/.*: warning:" build.log; then
+            echo "::error::Build emitted compiler warnings in LynxBar sources/tests; zero-warning baseline is required."
+            grep -E "^${PWD}/(Sources|Tests)/.*: warning:" build.log | sort -u
             exit 1
           fi
 

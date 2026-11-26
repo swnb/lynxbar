@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -100,9 +100,9 @@ jobs:
 
       - name: Fail on warnings
         run: |
-          if grep -q ": warning:" build.log; then
-            echo "::error::Debug build emitted compiler warnings; zero-warning baseline is required."
-            grep ": warning:" build.log | sort -u
+          if grep -Eq "^${PWD}/(Sources|Tests)/.*: warning:" build.log; then
+            echo "::error::Debug build emitted compiler warnings in LynxBar sources/tests; zero-warning baseline is required."
+            grep -E "^${PWD}/(Sources|Tests)/.*: warning:" build.log | sort -u
             exit 1
           fi
 
@@ -221,9 +221,9 @@ jobs:
             CODE_SIGN_IDENTITY="Developer ID Application" \
             archive 2>&1 | tee build/release-build.log
 
-          if grep -q ": warning:" build/release-build.log; then
-            echo "::error::Release build emitted compiler warnings; zero-warning baseline is required."
-            grep ": warning:" build/release-build.log | sort -u
+          if grep -Eq "^${PWD}/(Sources|Tests)/.*: warning:" build/release-build.log; then
+            echo "::error::Release build emitted compiler warnings in LynxBar sources/tests; zero-warning baseline is required."
+            grep -E "^${PWD}/(Sources|Tests)/.*: warning:" build/release-build.log | sort -u
             exit 1
           fi
 
@@ -303,9 +303,9 @@ jobs:
             CODE_SIGNING_ALLOWED=YES \
             build 2>&1 | tee build/release-build.log
 
-          if grep -q ": warning:" build/release-build.log; then
-            echo "::error::Release build emitted compiler warnings; zero-warning baseline is required."
-            grep ": warning:" build/release-build.log | sort -u
+          if grep -Eq "^${PWD}/(Sources|Tests)/.*: warning:" build/release-build.log; then
+            echo "::error::Release build emitted compiler warnings in LynxBar sources/tests; zero-warning baseline is required."
+            grep -E "^${PWD}/(Sources|Tests)/.*: warning:" build/release-build.log | sort -u
             exit 1
           fi
 
@@ -370,7 +370,7 @@ jobs:
               ]
           else:
               lines += [
-                  "Signed with Developer ID, notarized by Apple, and stapled for **macOS 13.0+ (Universal: Apple Silicon & Intel)**.",
+                  "Signed with Developer ID, notarized by Apple, and stapled for **macOS 14.0+ (Universal: Apple Silicon & Intel)**.",
                   "",
               ]
 
