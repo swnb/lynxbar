@@ -70,7 +70,7 @@
   - `Battery`：电池电量、充放电功耗与健康信息，并集成 `AccessoryPower`（标准 HID / opt-in BLE 外设电量）。
   - `Thermal`：基于系统公开热状态通知（`ProcessInfo.thermalState`）的订阅驱动状态，纳入 `SystemHealthEvaluator` 评估，不构造虚假数值轮询。
 - **Settings**：集中管理模块开关、实时刷新频率（`1 / 2 / 5 / 10` 秒 Picker）、磁盘容量采样间隔（`10m / 1h / 1d` Picker）、`Public IP` 开关、进程采集行数（`5–20` 步长 `5` Stepper）、登录启动及外观偏好（`System / Dark / Light`，已落地）。
-- **AI Quota（Opt-in）**：面向 Claude 订阅的只读配额监控能力（`AIUsageProvider` / `ClaudeUsageProvider`）已落地，设计参见 [`lynxbar-ai-quota-and-opensource-plan.md`](./lynxbar-ai-quota-and-opensource-plan.md)。
+- **AI Quota（Opt-in）**：面向 Claude、OpenAI Codex 与 Antigravity 的多服务商订阅配额监控能力（`AIUsageProvider` / `CodexBarUsageProvider` 适配 [`CodexBarCore`](https://github.com/steipete/CodexBar) MIT，显式关闭浏览器 Cookie 抓取）已落地，支持独立按服务商开关与多卡片同屏展示，设计参见 [`lynxbar-ai-quota-and-opensource-plan.md`](./lynxbar-ai-quota-and-opensource-plan.md)。
 
 ---
 

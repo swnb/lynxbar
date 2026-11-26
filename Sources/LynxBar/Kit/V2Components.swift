@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 extension View {
@@ -5,19 +6,275 @@ extension View {
     func v2InteractiveSurface() -> some View {
         contentShape(Rectangle())
     }
+
+    /// 在 macOS 14+ 上启用平滑数字滚动过渡，macOS 13 自动回退为静默更新。
+    @ViewBuilder
+    func lynxNumericTransition() -> some View {
+        if #available(macOS 14.0, *) {
+            self.contentTransition(.numericText())
+        } else {
+            self
+        }
+    }
 }
 
+/// 封装原生 `NSVisualEffectView` 的窗口后置毛玻璃底板。
+/// 在用户开启“降低透明度”辅助功能时自动回退到高对比不透明 `Theme.surface`。
+struct VisualEffectBackdrop: View {
+    var material: NSVisualEffectView.Material = .popover
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        if reduceTransparency || Theme.shouldReduceTransparency {
+            Theme.surface
+        } else {
+            ZStack {
+                VisualEffectViewRepresentable(material: material)
+                Theme.panelBackdropTint
+            }
+        }
+    }
+}
+
+/// `NSVisualEffectView` 的轻量 SwiftUI 桥接，锁定 `.behindWindow` 与 `.active` 状态。
+private struct VisualEffectViewRepresentable: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        if nsView.material != material {
+            nsView.material = material
+        }
+        nsView.blendingMode = .behindWindow
+        nsView.state = .active
+    }
+}
+
+/// 原生毛玻璃精密卡片容器：采用 continuous 圆角、半透明抬升表面、0.5pt 精密描边与顶部微高光。
+/// 可选 `accentTint` 用于 Hero / 告警卡片叠加极淡的环境色光晕。
 struct V2Card<Content: View>: View {
+    var accentTint: Color? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
         content()
-            .background(Theme.raised)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.card)
-                    .stroke(Theme.divider, lineWidth: 1)
+            .background {
+                ZStack {
+                    shape.fill(Theme.cardFill)
+                    if let accentTint {
+                        shape.fill(
+                            LinearGradient(
+                                colors: [accentTint.opacity(0.095), accentTint.opacity(0.02), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    }
+                }
             }
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [Theme.cardTopHighlight, .clear, .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.75
+                )
+            }
+            .overlay {
+                shape.strokeBorder(
+                    accentTint.map { $0.opacity(0.22) } ?? Theme.cardHairline,
+                    lineWidth: 0.5
+                )
+            }
+    }
+}
+
+/// 统一的胶囊进度条组件，替代系统默认 `ProgressView`，保持凹陷槽与柔和渐变填充一致。
+struct LynxProgressBar: View {
+    let value: Double
+    let tint: Color
+    var height: CGFloat = 5
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var clampedValue: Double {
+        guard value.isFinite else { return 0 }
+        return min(max(value, 0), 1)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let fillWidth = clampedValue > 0 ? max(height, proxy.size.width * CGFloat(clampedValue)) : 0
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(Theme.controlTrack)
+                if fillWidth > 0 {
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [tint.opacity(0.82), tint],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: min(proxy.size.width, fillWidth))
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: clampedValue)
+                }
+            }
+        }
+        .frame(height: height)
+        .accessibilityHidden(true)
+    }
+}
+
+/// 统一的滑动胶囊分段选择器，用于趋势切换、进程排序等轻量选项，替代混用的系统分段 Picker。
+struct LynxSegmentedPill<Option: Hashable>: View {
+    let options: [Option]
+    let selection: Option
+    let title: (Option) -> String
+    var minItemWidth: CGFloat = 42
+    var itemHeight: CGFloat = 22
+    let onSelect: (Option) -> Void
+
+    @Namespace private var thumbNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(options, id: \.self) { option in
+                SegmentedPillOptionButton(
+                    title: title(option),
+                    isSelected: selection == option,
+                    minWidth: minItemWidth,
+                    height: itemHeight,
+                    namespace: thumbNamespace,
+                    reduceMotion: reduceMotion,
+                    action: {
+                        if reduceMotion {
+                            onSelect(option)
+                        } else {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                                onSelect(option)
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        .padding(2)
+        .background(Theme.controlTrack)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .strokeBorder(Theme.cardHairline, lineWidth: 0.5)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// `LynxSegmentedPill` 内部单个选项按钮，提供完整命中面、hover、键盘焦点环与 VoiceOver 选中态。
+private struct SegmentedPillOptionButton: View {
+    let title: String
+    let isSelected: Bool
+    let minWidth: CGFloat
+    let height: CGFloat
+    let namespace: Namespace.ID
+    let reduceMotion: Bool
+    let action: () -> Void
+
+    @FocusState private var isFocused: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(LocalizedStringKey(title))
+                .font(Theme.Font.micro.weight(isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? Theme.ink : Theme.secondaryInk)
+                .padding(.horizontal, 6)
+                .frame(minWidth: minWidth, minHeight: height)
+                .v2InteractiveSurface()
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Theme.controlThumb)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .strokeBorder(Theme.cardHairline, lineWidth: 0.5)
+                            }
+                            .shadow(color: Color.black.opacity(0.08), radius: 1.5, y: 0.5)
+                            .matchedGeometryEffect(id: "segmentedThumb", in: namespace)
+                    } else if isHovered {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Theme.hoverFill)
+                    }
+                }
+                .overlay {
+                    if isFocused {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(Theme.focusRingColor(isSelected: isSelected), lineWidth: 2)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .focused($isFocused)
+        .onHover { isHovered = $0 }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// 统一的语义淡彩胶囊行动按钮，替代系统 `.bordered` 灰按钮，在深浅色毛玻璃下保持高质感与清晰层级。
+struct LynxActionPillButton: View {
+    let title: String
+    let tint: Color
+    var isProminent: Bool = false
+    let action: () -> Void
+
+    @FocusState private var isFocused: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(LocalizedStringKey(title))
+                .font(Theme.Font.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 24)
+                .v2InteractiveSurface()
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(tint.opacity(fillOpacity))
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(tint.opacity(isProminent ? 0.42 : 0.28), lineWidth: 0.5)
+                }
+                .overlay {
+                    if isFocused {
+                        Capsule(style: .continuous)
+                            .stroke(Theme.focusRingColor(isSelected: false), lineWidth: 2)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .focused($isFocused)
+        .onHover { isHovered = $0 }
+    }
+
+    private var fillOpacity: Double {
+        if isHovered {
+            return isProminent ? 0.28 : 0.20
+        }
+        return isProminent ? 0.18 : 0.12
     }
 }
 
@@ -110,22 +367,34 @@ struct RangePicker: View {
     let selection: HistoryRange
     let select: (HistoryRange) -> Void
 
+    @Namespace private var thumbNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 2) {
             ForEach(ranges) { range in
                 RangeButton(
                     range: range,
                     isSelected: selection == range,
-                    action: { select(range) }
+                    namespace: thumbNamespace,
+                    action: {
+                        if reduceMotion {
+                            select(range)
+                        } else {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                                select(range)
+                            }
+                        }
+                    }
                 )
             }
         }
         .padding(2)
-        .background(Theme.raisedStrong)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
+        .background(Theme.controlTrack)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Theme.Radius.control)
-                .stroke(Theme.divider, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                .strokeBorder(Theme.cardHairline, lineWidth: 0.5)
         }
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -190,6 +459,7 @@ struct CompactRefreshButton: View {
 private struct RangeButton: View {
     let range: HistoryRange
     let isSelected: Bool
+    let namespace: Namespace.ID
     let action: () -> Void
     @FocusState private var isFocused: Bool
     @State private var isHovered = false
@@ -199,13 +469,26 @@ private struct RangeButton: View {
             Text(range.rawValue)
                 .font(Theme.Font.subheadline.weight(isSelected ? .semibold : .medium))
                 .foregroundStyle(isSelected ? Theme.ink : Theme.secondaryInk)
-                .frame(minWidth: 36, minHeight: 26)
+                .frame(minWidth: 36, minHeight: 24)
                 .v2InteractiveSurface()
-                .background(isSelected ? Theme.selectedFill : (isHovered ? Theme.hoverFill : .clear))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .fill(Theme.controlThumb)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                                    .strokeBorder(Theme.cardHairline, lineWidth: 0.5)
+                            }
+                            .shadow(color: Color.black.opacity(0.08), radius: 1.5, y: 0.5)
+                            .matchedGeometryEffect(id: "rangeThumb", in: namespace)
+                    } else if isHovered {
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
+                            .fill(Theme.hoverFill)
+                    }
+                }
                 .overlay {
                     if isFocused {
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 5.5, style: .continuous)
                             .stroke(Theme.focusRingColor(isSelected: isSelected), lineWidth: 2)
                     }
                 }

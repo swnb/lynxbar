@@ -7,6 +7,27 @@ enum MenuBarReadingAvailability: String, Codable, Sendable {
     case unavailable
 }
 
+/// Single provider's representative AI quota reading used to format the menu bar `AI` slot.
+struct MenuBarAIQuotaEntry: Equatable, Sendable {
+    let providerID: AIUsageProviderID
+    let usedRatio: Double
+    let resetsAt: Date?
+    let observedAt: Date
+
+    /// Creates a normalized AI quota menu bar entry with `usedRatio` clamped to `0...1`.
+    init(
+        providerID: AIUsageProviderID,
+        usedRatio: Double,
+        resetsAt: Date? = nil,
+        observedAt: Date
+    ) {
+        self.providerID = providerID
+        self.usedRatio = usedRatio.isFinite ? min(max(usedRatio, 0), 1) : 0
+        self.resetsAt = resetsAt
+        self.observedAt = observedAt
+    }
+}
+
 /// 数值以比例（0...1）或 bytes/s 表达；来源时间为真正采样时间。
 /// 数值 TTL 单位秒。公开通知状态使用 observationActive 表达有效订阅，
 /// 不因长时间没有状态变化而套用轮询数值的陈旧窗口。
@@ -16,6 +37,7 @@ struct MenuBarMetricReading: Equatable, Sendable {
     let stateValue: String?
     let resetsAt: Date?
     let displayStyle: AIQuotaDisplayStyle?
+    let aiQuotaEntries: [MenuBarAIQuotaEntry]
     let observedAt: Date?
     let staleAfter: TimeInterval
     let availability: MenuBarReadingAvailability
@@ -34,6 +56,7 @@ struct MenuBarMetricReading: Equatable, Sendable {
             stateValue: nil,
             resetsAt: nil,
             displayStyle: nil,
+            aiQuotaEntries: [],
             observedAt: observedAt,
             staleAfter: staleAfter,
             availability: primaryValue?.isFinite == true
@@ -55,6 +78,7 @@ struct MenuBarMetricReading: Equatable, Sendable {
             stateValue: stateValue,
             resetsAt: nil,
             displayStyle: nil,
+            aiQuotaEntries: [],
             observedAt: observedAt,
             staleAfter: staleAfter,
             availability: stateValue == nil ? .unavailable : .available,
@@ -70,6 +94,7 @@ struct MenuBarMetricReading: Equatable, Sendable {
             stateValue: stateValue,
             resetsAt: nil,
             displayStyle: nil,
+            aiQuotaEntries: [],
             observedAt: nil,
             staleAfter: 0,
             availability: observationActive && stateValue != nil ? .available : .unavailable,
@@ -77,27 +102,66 @@ struct MenuBarMetricReading: Equatable, Sendable {
         )
     }
 
-    /// Creates a menu bar reading for an AI subscription quota window with a 15-minute (900s) default TTL.
+    /// Creates a menu bar reading for a single AI subscription quota window with a 15-minute (900s) default TTL.
     static func aiQuota(
         usedRatio: Double?,
         resetsAt: Date? = nil,
         displayStyle: AIQuotaDisplayStyle = .remaining,
         observedAt: Date,
-        staleAfter: TimeInterval = 900
+        staleAfter: TimeInterval = 900,
+        providerID: AIUsageProviderID = .claude
     ) -> Self {
-        let validUsedRatio: Double? = {
-            guard let usedRatio, usedRatio.isFinite else { return nil }
-            return min(max(usedRatio, 0), 1)
-        }()
+        guard let usedRatio, usedRatio.isFinite else {
+            return .unavailable
+        }
+        let validUsedRatio = min(max(usedRatio, 0), 1)
+        let entry = MenuBarAIQuotaEntry(
+            providerID: providerID,
+            usedRatio: validUsedRatio,
+            resetsAt: resetsAt,
+            observedAt: observedAt
+        )
         return MenuBarMetricReading(
             primaryValue: validUsedRatio,
             secondaryValue: nil,
             stateValue: nil,
             resetsAt: resetsAt,
             displayStyle: displayStyle,
+            aiQuotaEntries: [entry],
             observedAt: observedAt,
             staleAfter: staleAfter,
-            availability: validUsedRatio != nil ? .available : .unavailable,
+            availability: .available,
+            observationActive: false
+        )
+    }
+
+    /// Creates a menu bar reading aggregating one or more enabled AI subscription providers with a 15-minute (900s) TTL.
+    static func aiQuotas(
+        _ entries: [MenuBarAIQuotaEntry],
+        displayStyle: AIQuotaDisplayStyle = .remaining,
+        staleAfter: TimeInterval = 900
+    ) -> Self {
+        guard !entries.isEmpty else {
+            return .unavailable
+        }
+        let ordered = entries.sorted { lhs, rhs in
+            let lhsIndex = AIUsageProviderID.allCases.firstIndex(of: lhs.providerID) ?? 0
+            let rhsIndex = AIUsageProviderID.allCases.firstIndex(of: rhs.providerID) ?? 0
+            return lhsIndex < rhsIndex
+        }
+        let mostConstrained = ordered.max { lhs, rhs in
+            lhs.usedRatio < rhs.usedRatio
+        } ?? ordered[0]
+        return MenuBarMetricReading(
+            primaryValue: mostConstrained.usedRatio,
+            secondaryValue: nil,
+            stateValue: nil,
+            resetsAt: mostConstrained.resetsAt,
+            displayStyle: displayStyle,
+            aiQuotaEntries: ordered,
+            observedAt: mostConstrained.observedAt,
+            staleAfter: staleAfter,
+            availability: .available,
             observationActive: false
         )
     }
@@ -109,6 +173,7 @@ struct MenuBarMetricReading: Equatable, Sendable {
         stateValue: nil,
         resetsAt: nil,
         displayStyle: nil,
+        aiQuotaEntries: [],
         observedAt: nil,
         staleAfter: 0,
         availability: .unavailable,
@@ -119,7 +184,15 @@ struct MenuBarMetricReading: Equatable, Sendable {
     func resolvedAvailability(at now: Date) -> MenuBarReadingAvailability {
         guard availability == .available else { return availability }
         if observationActive { return .available }
-        guard let observedAt, staleAfter > 0 else {
+        guard staleAfter > 0 else { return .stale }
+        if !aiQuotaEntries.isEmpty {
+            let hasFreshEntry = aiQuotaEntries.contains { entry in
+                let age = now.timeIntervalSince(entry.observedAt)
+                return age >= 0 && age <= staleAfter
+            }
+            return hasFreshEntry ? .available : .stale
+        }
+        guard let observedAt else {
             return .stale
         }
         let age = now.timeIntervalSince(observedAt)
@@ -224,16 +297,46 @@ enum MenuBarStatusFormatter {
 
         if slot == .aiUsage {
             let style = aiQuotaDisplayStyle ?? reading.displayStyle ?? .remaining
-            let usedRatio = min(max(reading.primaryValue ?? 0, 0), 1)
+            let freshEntries: [MenuBarAIQuotaEntry] = {
+                let candidates = reading.aiQuotaEntries.filter { entry in
+                    let age = now.timeIntervalSince(entry.observedAt)
+                    return age >= 0 && age <= reading.staleAfter
+                }
+                if !candidates.isEmpty {
+                    return candidates.sorted { lhs, rhs in
+                        let lhsIndex = AIUsageProviderID.allCases.firstIndex(of: lhs.providerID) ?? 0
+                        let rhsIndex = AIUsageProviderID.allCases.firstIndex(of: rhs.providerID) ?? 0
+                        return lhsIndex < rhsIndex
+                    }
+                }
+                return [
+                    MenuBarAIQuotaEntry(
+                        providerID: .claude,
+                        usedRatio: reading.primaryValue ?? 0,
+                        resetsAt: reading.resetsAt,
+                        observedAt: reading.observedAt ?? now
+                    ),
+                ]
+            }()
+            // Display the most-constrained fresh provider's percentage so multi-provider slots
+            // stay within both Focus (132pt) and Compact (300pt) width budgets without collapsing.
+            let representative = freshEntries.max { lhs, rhs in
+                if lhs.usedRatio != rhs.usedRatio {
+                    return lhs.usedRatio < rhs.usedRatio
+                }
+                let lhsIndex = AIUsageProviderID.allCases.firstIndex(of: lhs.providerID) ?? 0
+                let rhsIndex = AIUsageProviderID.allCases.firstIndex(of: rhs.providerID) ?? 0
+                return lhsIndex > rhsIndex
+            } ?? freshEntries[0]
+            let usedRatio = min(max(representative.usedRatio, 0), 1)
             let displayedRatio = style == .remaining ? max(0, min(1, 1.0 - usedRatio)) : usedRatio
             let percent = boundedPercent(displayedRatio)
             return MenuBarStatusSegment(
                 slot: slot,
                 text: "\(shortLabel(slot)) \(percent)%",
                 accessibilityLabel: localizedAIQuotaAccessibility(
-                    percent: percent,
+                    entries: freshEntries,
                     style: style,
-                    resetsAt: reading.resetsAt,
                     locale: locale,
                     now: now
                 )
@@ -445,35 +548,43 @@ enum MenuBarStatusFormatter {
             || locale.identifier.lowercased().hasPrefix("zh")
     }
 
-    /// Formats a deterministic bilingual accessibility label for the AI quota menu bar slot.
+    /// Formats a deterministic bilingual accessibility label listing all active AI quota providers and percentages.
     private static func localizedAIQuotaAccessibility(
-        percent: Int,
+        entries: [MenuBarAIQuotaEntry],
         style: AIQuotaDisplayStyle,
-        resetsAt: Date?,
         locale: Locale,
         now: Date
     ) -> String {
         let chinese = isChinese(locale)
-        let base: String
-        if chinese {
-            let verb = style == .remaining ? "剩余" : "已用"
-            base = "Claude 额度\(verb) \(percent)%"
-        } else {
-            let suffix = style == .remaining ? "remaining" : "used"
-            base = "Claude quota \(percent)% \(suffix)"
+        let parts = entries.map { entry -> String in
+            let usedRatio = min(max(entry.usedRatio, 0), 1)
+            let displayedRatio = style == .remaining ? max(0, min(1, 1.0 - usedRatio)) : usedRatio
+            let percent = boundedPercent(displayedRatio)
+            let providerName = entry.providerID.displayName
+            let base: String
+            if chinese {
+                let verb = style == .remaining ? "剩余" : "已用"
+                base = "\(providerName) 额度\(verb) \(percent)%"
+            } else {
+                let suffix = style == .remaining ? "remaining" : "used"
+                base = "\(providerName) quota \(percent)% \(suffix)"
+            }
+            guard let resetsAt = entry.resetsAt else { return base }
+            let remaining = resetsAt.timeIntervalSince(now)
+            guard remaining > 0 else { return base }
+            if chinese {
+                return "\(base)，\(localizedChineseDuration(remaining))后重置"
+            }
+            return "\(base), resets in \(Formatters.duration(remaining))"
         }
-        guard let resetsAt else { return base }
-        let remaining = resetsAt.timeIntervalSince(now)
-        guard remaining > 0 else { return base }
-        if chinese {
-            return "\(base)，\(localizedChineseDuration(remaining))后重置"
-        }
-        return "\(base), resets in \(Formatters.duration(remaining))"
+        return parts.joined(separator: chinese ? "；" : "; ")
     }
 
-    /// Formats a duration in natural Simplified Chinese units for VoiceOver and tooltips.
+    /// Formats a duration in natural Simplified Chinese units for VoiceOver and tooltips,
+    /// clamping negative or non-finite inputs to `"0 分钟"` and capping extreme values to avoid `Int` overflow.
     private static func localizedChineseDuration(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds))
+        guard seconds.isFinite, seconds > 0 else { return "0 分钟" }
+        let total = Int(min(seconds, Formatters.maxDisplayDurationSeconds))
         let days = total / 86_400
         let hours = (total % 86_400) / 3_600
         let minutes = (total % 3_600) / 60

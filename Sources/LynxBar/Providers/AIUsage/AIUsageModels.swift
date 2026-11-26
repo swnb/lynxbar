@@ -3,9 +3,59 @@ import Foundation
 /// Supported AI subscription quota providers. Raw values are persisted in Settings.
 enum AIUsageProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
     case claude
+    case codex
+    case antigravity
 
     /// Stable `Identifiable` identifier matching the provider raw value.
     var id: Self { self }
+
+    /// Human-readable display name for UI labels and accessibility announcements.
+    var displayName: String {
+        switch self {
+        case .claude:
+            return "Claude"
+        case .codex:
+            return "OpenAI Codex"
+        case .antigravity:
+            return "Antigravity"
+        }
+    }
+
+    /// Concise provider name suitable for compact UI rows and badges.
+    var shortName: String {
+        switch self {
+        case .claude:
+            return "Claude"
+        case .codex:
+            return "Codex"
+        case .antigravity:
+            return "Antigravity"
+        }
+    }
+
+    /// Terminal command users run to authenticate or refresh this provider's local CLI session.
+    var cliLoginCommand: String {
+        switch self {
+        case .claude:
+            return "claude /login"
+        case .codex:
+            return "codex login"
+        case .antigravity:
+            return "agy login"
+        }
+    }
+
+    /// SF Symbol name representing this provider in dashboard cards and menus.
+    var symbolName: String {
+        switch self {
+        case .claude:
+            return "sparkles"
+        case .codex:
+            return "terminal"
+        case .antigravity:
+            return "diamond"
+        }
+    }
 }
 
 /// User-selectable percentage convention for AI quota progress bars and menu bar text.
@@ -31,6 +81,8 @@ struct AIQuotaWindow: Equatable, Sendable {
         case session5h
         case weekly7d
         case weeklyModelSpecific
+        case codeReview
+        case modelQuota
     }
 
     let id: String
@@ -87,20 +139,77 @@ struct AIExtraUsageSummary: Equatable, Sendable {
     let currencyCode: String
 }
 
+/// Optional credits balance summary reported by providers with prepaid or credit-based overages.
+struct AIProviderCreditsSummary: Equatable, Sendable {
+    /// Indicates whether the account has a credits balance available.
+    let hasCredits: Bool
+    /// Indicates whether the account has unlimited credits.
+    let unlimited: Bool
+    /// Raw or formatted textual representation of the remaining balance, if provided.
+    let balanceText: String?
+    /// Numeric credit balance when parseable as a finite `Double`.
+    let balanceAmount: Double?
+
+    /// Creates a credits summary while filtering out non-finite numeric balances.
+    init(
+        hasCredits: Bool,
+        unlimited: Bool,
+        balanceText: String? = nil,
+        balanceAmount: Double? = nil
+    ) {
+        self.hasCredits = hasCredits
+        self.unlimited = unlimited
+        let trimmed = balanceText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.balanceText = (trimmed?.isEmpty == false) ? trimmed : nil
+        if let balanceAmount, balanceAmount.isFinite {
+            self.balanceAmount = balanceAmount
+        } else {
+            self.balanceAmount = nil
+        }
+    }
+}
+
 /// Immutable quota snapshot returned by an `AIUsageProvider`.
 struct AIProviderQuotaSnapshot: Equatable, Sendable {
     let providerID: AIUsageProviderID
-    /// Primary rolling window (Claude: 5-hour session) driving menu bar and Overview summaries.
+    /// Primary quota window (e.g., 5-hour session for Claude/Codex, or Gemini Pro) driving menu bar and Overview summaries.
     let primaryWindow: AIQuotaWindow?
-    /// Secondary rolling window (Claude: 7-day weekly).
+    /// Secondary quota window (e.g., 7-day weekly for Claude/Codex, or Gemini Flash).
     let secondaryWindow: AIQuotaWindow?
-    /// Optional breakdown windows (e.g., model-specific 7-day quotas) when returned.
+    /// Optional breakdown windows (e.g., model-specific, code-review, or additional model quotas) when returned.
     let additionalWindows: [AIQuotaWindow]
     let extraUsage: AIExtraUsageSummary?
-    /// Optional subscription tier label derived from credential metadata (e.g., "Pro", "Max").
+    /// Optional credits balance summary reported alongside quota windows (e.g., OpenAI Codex).
+    let credits: AIProviderCreditsSummary?
+    /// Optional subscription tier label derived from credential metadata or API tier info (e.g., "Pro", "Max").
     let planLabel: String?
+    /// Optional non-secret account identifier such as the signed-in email address.
+    let accountLabel: String?
     /// Timestamp when this snapshot was successfully fetched.
     let fetchedAt: Date
+
+    /// Creates a normalized quota snapshot with defaults for optional provider-specific fields.
+    init(
+        providerID: AIUsageProviderID,
+        primaryWindow: AIQuotaWindow? = nil,
+        secondaryWindow: AIQuotaWindow? = nil,
+        additionalWindows: [AIQuotaWindow] = [],
+        extraUsage: AIExtraUsageSummary? = nil,
+        planLabel: String? = nil,
+        credits: AIProviderCreditsSummary? = nil,
+        accountLabel: String? = nil,
+        fetchedAt: Date
+    ) {
+        self.providerID = providerID
+        self.primaryWindow = primaryWindow
+        self.secondaryWindow = secondaryWindow
+        self.additionalWindows = additionalWindows
+        self.extraUsage = extraUsage
+        self.planLabel = planLabel
+        self.credits = credits
+        self.accountLabel = accountLabel
+        self.fetchedAt = fetchedAt
+    }
 }
 
 /// Explicit failure taxonomy so the UI can render actionable remediation instead of opaque errors.

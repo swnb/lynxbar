@@ -586,9 +586,18 @@ struct ContinuousChartCanvas: View {
                     yDomain: yDomain
                 )
                 if item.style.areaOpacity > 0 {
+                    let topOpacity = min(0.32, item.style.areaOpacity * 1.45)
                     context.fill(
                         paths.area,
-                        with: .color(item.style.color.opacity(item.style.areaOpacity))
+                        with: .linearGradient(
+                            Gradient(colors: [
+                                item.style.color.opacity(topOpacity),
+                                item.style.color.opacity(topOpacity * 0.25),
+                                item.style.color.opacity(0),
+                            ]),
+                            startPoint: CGPoint(x: dataRect.midX, y: dataRect.minY),
+                            endPoint: CGPoint(x: dataRect.midX, y: dataRect.maxY)
+                        )
                     )
                 }
                 context.stroke(
@@ -609,6 +618,16 @@ struct ContinuousChartCanvas: View {
                         yDomain: yDomain
                     )
                     let diameter = item.style.markerDiameter
+                    let haloDiameter = diameter * 2.4
+                    context.fill(
+                        Path(ellipseIn: CGRect(
+                            x: center.x - haloDiameter / 2,
+                            y: center.y - haloDiameter / 2,
+                            width: haloDiameter,
+                            height: haloDiameter
+                        )),
+                        with: .color(item.style.color.opacity(0.22))
+                    )
                     context.fill(
                         Path(ellipseIn: CGRect(
                             x: center.x - diameter / 2,
@@ -617,6 +636,16 @@ struct ContinuousChartCanvas: View {
                             height: diameter
                         )),
                         with: .color(item.style.color)
+                    )
+                    let coreDiameter = diameter * 0.42
+                    context.fill(
+                        Path(ellipseIn: CGRect(
+                            x: center.x - coreDiameter / 2,
+                            y: center.y - coreDiameter / 2,
+                            width: coreDiameter,
+                            height: coreDiameter
+                        )),
+                        with: .color(Color.white.opacity(0.75))
                     )
                 }
             }

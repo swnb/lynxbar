@@ -82,35 +82,12 @@ actor ClaudeUsageProvider: AIUsageProvider {
 
     /// Parses a `Retry-After` HTTP header containing either integer/decimal seconds or an HTTP-date.
     static func parseRetryAfter(_ headerValue: String?, now: Date) -> TimeInterval? {
-        guard let raw = headerValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else {
-            return nil
-        }
-        if let seconds = TimeInterval(raw), seconds.isFinite, seconds > 0 {
-            return seconds
-        }
-
-        let formats = [
-            "EEE, dd MMM yyyy HH:mm:ss zzz",
-            "EEEE, dd-MMM-yy HH:mm:ss zzz",
-            "EEE MMM d HH:mm:ss yyyy",
-        ]
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        for format in formats {
-            formatter.dateFormat = format
-            if let retryDate = formatter.date(from: raw) {
-                let delta = retryDate.timeIntervalSince(now)
-                return delta > 0 ? delta : nil
-            }
-        }
-        return nil
+        AIUsageParsing.parseRetryAfter(headerValue, now: now)
     }
 
     /// Reads `CFBundleShortVersionString` from the main bundle for the `User-Agent` header.
     nonisolated static func defaultBundleVersion() -> String {
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.1.0"
+        AIUsageParsing.defaultBundleVersion()
     }
 
     /// Decodes Anthropic's tolerant usage payload into an `AIProviderQuotaSnapshot`.
@@ -215,14 +192,7 @@ actor ClaudeUsageProvider: AIUsageProvider {
 
     /// Parses an ISO-8601 timestamp supporting both fractional and non-fractional seconds.
     static func parseISO8601Date(_ string: String?) -> Date? {
-        guard let trimmed = string?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty else {
-            return nil
-        }
-        if let date = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(trimmed) {
-            return date
-        }
-        return try? Date.ISO8601FormatStyle(includingFractionalSeconds: false).parse(trimmed)
+        AIUsageParsing.parseISO8601Date(string)
     }
 
     /// Derives a concise plan badge label from credential tier metadata when available.

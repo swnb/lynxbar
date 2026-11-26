@@ -88,8 +88,8 @@ struct SettingsView: View {
                         if settings.menuBarSlots
                             .prefix(settings.menuBarDisplayMode.maximumSlotCount)
                             .contains(.aiUsage),
-                           !settings.aiUsageEnabled {
-                            Text("Claude quota is off in Privacy. The menu bar slot displays AI — without making network requests.")
+                           !settings.anyAIUsageEnabled {
+                            Text("All AI quota providers are off in Privacy. The menu bar slot displays AI — without making network requests.")
                                 .font(Theme.Font.micro)
                                 .foregroundStyle(Theme.mutedInk)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -243,16 +243,48 @@ struct SettingsView: View {
 
                     Divider().overlay(Theme.divider)
 
-                    Toggle(isOn: $settings.aiUsageEnabled) {
+                    Toggle(isOn: $settings.claudeUsageEnabled) {
                         SettingsLabel(
-                            systemName: "sparkles",
-                            color: Theme.aiUsage,
+                            systemName: AIUsageProviderID.claude.symbolName,
+                            color: Theme.aiProviderAccent(for: .claude),
                             title: "Claude subscription quota",
                             detail: "Off by default · read-only local OAuth"
                         )
                     }
                     .toggleStyle(SwitchToggleStyle(tint: Theme.selection))
                     Text("Reads local Claude Code OAuth credentials read-only (Keychain or ~/.claude/.credentials.json) and queries api.anthropic.com every 5 minutes only while viewed or shown in the menu bar. Never reads browser cookies or stores passwords.")
+                        .font(Theme.Font.micro)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Divider().overlay(Theme.divider)
+
+                    Toggle(isOn: $settings.codexUsageEnabled) {
+                        SettingsLabel(
+                            systemName: AIUsageProviderID.codex.symbolName,
+                            color: Theme.aiProviderAccent(for: .codex),
+                            title: "OpenAI Codex subscription quota",
+                            detail: "Off by default · read-only local OAuth"
+                        )
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: Theme.selection))
+                    Text("Reads local Codex CLI OAuth credentials read-only ($CODEX_HOME/auth.json or ~/.codex/auth.json) and queries chatgpt.com every 5 minutes only while viewed or shown in the menu bar. Never reads browser cookies or refreshes tokens.")
+                        .font(Theme.Font.micro)
+                        .foregroundStyle(Theme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Divider().overlay(Theme.divider)
+
+                    Toggle(isOn: $settings.antigravityUsageEnabled) {
+                        SettingsLabel(
+                            systemName: AIUsageProviderID.antigravity.symbolName,
+                            color: Theme.aiProviderAccent(for: .antigravity),
+                            title: "Antigravity subscription quota",
+                            detail: "Off by default · local app / agy CLI via CodexBarCore"
+                        )
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: Theme.selection))
+                    Text("Queries your local Antigravity app, IDE, or agy CLI session every 5 minutes via CodexBarCore only while viewed or shown in the menu bar. Never reads browser cookies or stores passwords.")
                         .font(Theme.Font.micro)
                         .foregroundStyle(Theme.mutedInk)
                         .fixedSize(horizontal: false, vertical: true)
@@ -469,6 +501,7 @@ private struct SettingsLabel: View {
                     .lineLimit(1)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -490,6 +523,7 @@ private struct DestinationToggle: View {
                 Text(LocalizedStringKey(title))
                     .font(Theme.Font.caption.weight(.medium))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .toggleStyle(SwitchToggleStyle(tint: Theme.selection))
         .controlSize(.small)

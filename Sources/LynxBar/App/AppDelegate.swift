@@ -418,6 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, MonitoringDemandOwner 
     private static func flushHistoryThenReply(to sender: NSApplication) async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
+                await CodexBarUsageProvider.shutdownPersistentSessions()
                 do {
                     try await MetricHistoryStore.shared.flush()
                 } catch {

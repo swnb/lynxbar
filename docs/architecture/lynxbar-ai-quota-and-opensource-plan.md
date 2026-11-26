@@ -1,8 +1,8 @@
 # LynxBar：AI 订阅额度监控与开源标准化技术方案
 
-> **文档状态**：已实施（Phases 1–5 架构设计基线）  
+> **文档状态**：已实施（Phases 1–5 架构设计基线 + 多服务商 AI 额度扩展：Claude / OpenAI Codex / Antigravity，底层接入 `CodexBarCore` MIT）  
 > **目标品牌**：`LynxBar`（原 `Stats`） · 仓库 `github.com/swnb/lynxbar` · Bundle ID `com.swnb.LynxBar`  
-> **适用基线**：Swift 6（`SWIFT_STRICT_CONCURRENCY: complete`）· macOS 13.0+ · XcodeGen · 零第三方依赖 · 0-warning CI 门禁
+> **适用基线**：Swift 6（`SWIFT_STRICT_CONCURRENCY: complete`）· macOS 14.0+ · XcodeGen · `CodexBarCore`（MIT）· 0-warning CI 门禁
 
 ---
 
@@ -31,10 +31,10 @@
 
 本项目当前处于 `chore/debt-remediation` 分支，已完成采样门控（Change A）、数值精度（Change B）、有界历史存储（Change C）、渲染性能（Change D）与双外观/Dynamic Type（Change E）。为将项目正式打磨为高质量的国际开源 macOS 工具，本方案统一规划两条主线：
 
-1. **新增 AI 订阅额度监控模块（简化版 CodexBar）**：
-   - v1 聚焦 **Claude（Pro / Max / Claude Code）**，底层抽象可扩展 `AIUsageProvider` 协议，便于后续接入 OpenAI Codex、Gemini 等。
-   - **隐私与信任底线**：默认关闭（显式 Opt-in），仅只读复用本机 Claude Code OAuth 凭据，绝不触碰浏览器 Cookie、不保存明文密码、不静默拉起浏览器、不记录任何敏感日志。
-   - 深度融入既有按需采样框架（`MonitoringDemandCoordinator`）、单一菜单栏状态槽（`MenuBarStatusSlot`）与 `420 × 600` 固定面板。
+1. **AI 订阅额度监控模块（多服务商原生支持，`CodexBarCore` 驱动）**：
+   - 支持 **Claude（Pro / Max / Claude Code）**、**OpenAI Codex（Plus / Pro / Team / Codex CLI）** 与 **Antigravity（Google AI Pro / Ultra / Antigravity App & `agy` CLI）**，通过统一 `AIUsageProvider` 协议与 `CodexBarUsageProvider` 适配层接入 [`CodexBarCore`](https://github.com/steipete/CodexBar)（MIT，`v0.85.0`），并支持独立 per-provider 开关自由组合启用并同时展示多张卡片。
+   - **隐私与信任底线**：默认全部关闭（`claudeUsageEnabled` / `codexUsageEnabled` / `antigravityUsageEnabled` 均默认 `false`），`CodexBarUsageProvider.makeFetchContext` 显式禁用所有浏览器 Cookie 抓取（`cookieSource = .off`、`webExtrasEnabled = false`、`desktopCookiesEnabled = false`），绝不保存明文密码、不记录任何敏感日志；应用退出时通过 `CodexBarUsageProvider.shutdownPersistentSessions()` 清理常驻 CLI 会话。
+   - 深度融入既有按需采样框架（`MonitoringDemandCoordinator`）、单一菜单栏状态槽（`MenuBarStatusSlot.aiUsage`）与 `420 × 600` 固定面板。
 2. **达到国际开源发布标准并完成独立品牌化（LynxBar）**：
    - 更名为 **LynxBar**（`com.swnb.LynxBar`），彻底规避与 `exelban/stats` 的命名及 Homebrew Cask 冲突。
    - 移除强依赖本机私有脚本的 `CargoCacheCleanup`，清理个人遗留文件、54MB 历史 QA 截图、`website/` 与 `openspec/`。
@@ -61,12 +61,12 @@ flowchart TD
         CLN["DiskCleanup (Trash-safe)"]
     end
 
-    subgraph AIModule["AI Quota Module (New)"]
+    subgraph AIModule["AI Quota Module (Multi-Provider via CodexBarCore)"]
         AIVM["AIUsageViewModel (DemandDrivenModule)"]
         AIPR["AIUsageProvider Protocol"]
-        CLD["ClaudeUsageProvider (actor)"]
-        CRED["ClaudeCredentialReader (Keychain + ~/.claude)"]
-        HTTP["AIUsageHTTPClient (URLSession, injectable)"]
+        CBAD["CodexBarUsageProvider (actor, cookieSource = .off)"]
+        CBC["CodexBarCore (MIT, SwiftPM v0.85.0)"]
+        PROVS["Claude (.oauth) / Codex (.auto) / Antigravity (.auto)"]
     end
 
     subgraph UI["SwiftUI Dashboard"]
@@ -83,9 +83,9 @@ flowchart TD
     MB -->|"acquire .aiUsage"| DC
     PH -->|"acquire .panel(.aiUsage / .overview)"| DC
     AIVM --> AIPR
-    AIPR --> CLD
-    CLD --> CRED
-    CLD --> HTTP
+    AIPR --> CBAD
+    CBAD --> CBC
+    CBC --> PROVS
     AIVM --> MB
     AIVM --> OV
     AIVM --> AIV
@@ -95,20 +95,20 @@ flowchart TD
 ```
 
 ### 设计约束（与现有工程基线完全一致）
-- **零第三方依赖**：仅使用 `Foundation`、`Security`（Keychain 读取）、`os`、`AppKit`、`SwiftUI`、`Combine` 及既有系统框架。
+- **极简依赖边界**：系统监控模块纯基于 Apple 系统框架；AI 额度模块通过 SwiftPM 引入固定版本（`v0.85.0`）的开源 `CodexBarCore`（MIT），最低系统要求提升至 `macOS 14.0`。
 - **Swift 6 严格并发**：所有跨 actor 模型均显式遵守 `Sendable`，禁止使用 `@unchecked Sendable` 绕过检查。
-- **诚实数值语义**：「不知道不得显示为 0」。未启用、凭据缺失、Token 过期、网络离线或接口错误均通过显式状态枚举表达，绝不回退成 `0%` 或 `100%`。
-- **可测试性**：凭据读取（`ClaudeCredentialReading`）、HTTP 传输（`AIUsageHTTPTransport`）、时钟（`() -> Date`）全部面向协议注入，单元测试完全离线运行、不触发真实 Keychain 弹窗、不发起真实网络请求。
+- **诚实数值语义**：「不知道不得显示为 0」。未启用、凭据缺失、Token 过期、网络离线或接口错误均通过显式状态枚举表达，绝不回退成 `0%` 或 `100%`（并过滤 `RateWindow.isSyntheticPlaceholder` 与 `usageKnown == false` 的占位窗口）。
+- **可测试性**：`CodexBarUsageProvider` 支持注入 `UpstreamFetch` 闭包（以及保留可测试的凭据与 HTTP 传输协议），单元测试完全离线运行、不触发真实 Keychain 弹窗、不发起真实网络请求。
 
 ---
 
-## 3. 核心功能设计：AI 订阅额度模块（简化版 CodexBar）
+## 3. 核心功能设计：AI 订阅额度模块（基于 `CodexBarCore`）
 
 ### 3.1 可扩展 Provider 抽象与数据模型
 
-新建目录：
-- `Sources/LynxBar/Providers/AIUsage/`（数据模型、Provider 协议、Claude 实现、Keychain/文件凭据读取）
-- `Sources/LynxBar/Modules/AIUsage/`（`AIUsageViewModel`、`AIUsagePanelView`、进度条与倒计时子视图）
+目录结构：
+- `Sources/LynxBar/Providers/AIUsage/`（数据模型、Provider 协议、`CodexBarUsageProvider` 适配层、本地凭据/解析辅助类型）
+- `Sources/LynxBar/Modules/AIUsage/`（`AIUsageViewModel`、`AIUsagePanelView`、`OverviewAIQuotaRow`）
 
 #### 核心类型定义
 
@@ -116,7 +116,8 @@ flowchart TD
 /// Supported AI subscription providers. Raw values are persisted in Settings.
 enum AIUsageProviderID: String, CaseIterable, Codable, Identifiable, Sendable {
     case claude
-    // Future: case codex, gemini, cursor, copilot
+    case codex
+    case antigravity
 
     var id: Self { self }
 }
@@ -137,11 +138,13 @@ struct AIQuotaWindow: Equatable, Sendable {
         case session5h
         case weekly7d
         case weeklyModelSpecific
+        case codeReview
+        case modelQuota
     }
 
     let id: String
     let kind: Kind
-    /// Localized or provider-supplied label (e.g., "5-hour session", "7-day weekly", "Sonnet 7-day").
+    /// Localized or provider-supplied label (e.g., "5-hour session", "7-day weekly", "Code Review", "Gemini Pro").
     let title: String
     /// Raw server utilization ratio clamped to 0...1 (e.g., 0.22 means 22% used, 78% remaining).
     let usedRatio: Double
@@ -168,18 +171,30 @@ struct AIExtraUsageSummary: Equatable, Sendable {
     let currencyCode: String
 }
 
+/// Optional credits balance summary reported by providers with prepaid or credit-based overages.
+struct AIProviderCreditsSummary: Equatable, Sendable {
+    let hasCredits: Bool
+    let unlimited: Bool
+    let balanceText: String?
+    let balanceAmount: Double?
+}
+
 /// Immutable snapshot for one AI provider.
 struct AIProviderQuotaSnapshot: Equatable, Sendable {
     let providerID: AIUsageProviderID
-    /// Primary rolling window (Claude: 5-hour session) — drives menu bar & Overview summary.
+    /// Primary rolling window driving menu bar & Overview summaries.
     let primaryWindow: AIQuotaWindow?
-    /// Secondary rolling window (Claude: 7-day weekly).
+    /// Secondary rolling window.
     let secondaryWindow: AIQuotaWindow?
-    /// Additional breakdown windows (e.g., model-specific 7-day quotas) when returned.
+    /// Additional breakdown windows (e.g., model-specific, code-review, or additional model quotas) when returned.
     let additionalWindows: [AIQuotaWindow]
     let extraUsage: AIExtraUsageSummary?
-    /// Optional subscription tier metadata if available from credentials/API (e.g., "Pro", "Max").
+    /// Optional credits balance summary (e.g., OpenAI Codex).
+    let credits: AIProviderCreditsSummary?
+    /// Optional subscription tier metadata if available from credentials/API (e.g., "Pro", "Max", "Plus").
     let planLabel: String?
+    /// Optional non-secret account label (e.g., signed-in email).
+    let accountLabel: String?
     /// Timestamp of this successful upstream fetch.
     let fetchedAt: Date
 }
@@ -268,39 +283,38 @@ protocol AIUsageProvider: Sendable {
 - `BottomNavigation`（高度 `62pt`）仅放核心视图目的地：`Overview` + 已启用的资源模块（`CPU` / `Memory` / `Disk` / `Network` / `GPU` / `Battery`）+ `AI`（最多 8 格，与现有宽度密度持平，英文/中文标签均不截断）。
 - `Settings` 中的「可见目的地」新增 `AI Quota` 开关（控制底部 `AI` Tab 显隐；开启 Tab 不等于开启外网拉取，外网读取仍由独立隐私开关 `aiUsageEnabled` 控制，避免误触）。
 
+- **多服务商原生支持补充（Codex & Gemini）**：
+  - **OpenAI Codex（`CodexCredentialReader` + `CodexUsageProvider`）**：严格只读 `$CODEX_HOME/auth.json` 或 `~/.codex/auth.json`（不兑换 `refresh_token`），请求 `GET https://chatgpt.com/backend-api/wham/usage`（附带 `ChatGPT-Account-Id` 请求头若存在），解码主/次窗口、`Code Review`、`additional_rate_limits` 与 `credits`，过期/缺失引导 `codex login`。
+  - **Gemini（`GeminiCredentialReader` + `GeminiUsageProvider`）**：严格只读 `~/.gemini/settings.json`（校验 `oauth-personal` 或未配置认证类型）与 `~/.gemini/oauth_creds.json`，顺序调用 `POST https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist` 与 `:retrieveUserQuota`，按最低剩余比例聚合 `Gemini Pro`、`Gemini Flash` 与其余模型窗口，过期/缺失引导 `gemini`。
+
 #### 2) 菜单栏槽位（`MenuBarStatusSlot.aiUsage`）
 - 新增 `case aiUsage` 映射到 `MonitoringModule.aiUsage`。
 - `MenuBarStatusFormatter`：
   - 短标签：`AI`
-  - 数值：读取 `primaryWindow`（5h 会话）按用户口径（`remaining` 或 `used`）格式化为 `AI 78%`；未启用/无凭据/超 TTL 显示 `AI —`。
-  - 无障碍/Tooltip 完整文案：如 `Claude quota 78% remaining, resets in 2h 14m` / `Claude 额度剩余 78%，2 小时 14 分后重置`。
-- 当菜单栏槽位包含 `.aiUsage` 但 `settings.aiUsageEnabled == false` 时，槽位显示 `AI —`（不静默发请求），并在 Settings 槽位选择区给出一行提示。
+  - 数值：从已启用且仍在 `15m`（`900s`）TTL 内的服务商中选取最受限（已用比例最高）的主窗口格式化为 `AI 78%`，确保严格适配 `Focus`（`132pt`）与 `Compact`（`300pt`）宽度预算而不会折叠为 `"●"`；全部未启用、无有效数据或超过 TTL 时显示 `AI —`。
+  - 无障碍/Tooltip 完整文案：按 `Claude` → `OpenAI Codex` → `Gemini` 规范顺序列出所有活跃且未过期服务商的名称、百分比口径与重置倒计时。
+- 当菜单栏槽位包含 `.aiUsage` 但 `settings.anyAIUsageEnabled == false` 时，槽位显示 `AI —`（不静默发请求），并在 Settings 槽位选择区给出一行提示。
 
 #### 3) Overview 紧凑摘要与 420×600 垂直高度预算
 现有 `OverviewView` 可用高度为 `600 - 42 (Header) - 62 (BottomNav) = 496pt`。当前四张卡片总高为 `126 + 141 + 61 + 136 + 3×6 + 12 = 494pt`（已贴近极限）。
 
 因此采用**自适应零滚动布局**：
 - 当 `settings.aiUsageEnabled == false`：保持现有 4 卡片精确高度（零视觉回归）。
-- 当 `settings.aiUsageEnabled == true`：在 `healthCard` 与 `trendCard` 之间插入一张 `36pt` 高度的紧凑 `OverviewAIQuotaRow`（显示图标 + `Claude` + 5h/7d 迷你进度条或主百分比 + 重置倒计时 + 右箭头点击跳转 `.aiUsage`），同时微调高度保持总高严格 ≤ `494pt`：
+- 当 `settings.aiUsageEnabled == true`（任一服务商开启）：在 `healthCard` 与 `trendCard` 之间插入一张 `36pt` 高度的紧凑 `OverviewAIQuotaRow`（单服务商展示图标 + 名称 + `LynxProgressBar` + 百分比 + 倒计时；多服务商 2–3 个同时开启时横向分布为紧凑单行胶囊，始终严格保持 `36pt` 高度不换行、不溢出，VoiceOver 完整播报全部活跃服务商），同时微调高度保持总高严格 ≤ `494pt`：
   - `healthCard`: `120pt`（-6pt）
   - `aiQuotaRow`: `36pt`（新增）
-  - `trendCard`: `121pt`（-20pt）
+  - `trendCard`: `120pt`（-21pt）
   - `attentionCard`: `56pt`（-5pt）
-  - `processCard`: `125pt`（-11pt）
+  - `processCard`: `126pt`（-10pt）
   - 间距与内边距：`4×6 + 12 = 36pt` → 总高 `494pt ≤ 496pt`，无溢出、无需滚动。
 
-#### 4) AI 详情页（`AIUsagePanelView`）状态矩阵
-- **未启用态（默认首屏）**：清晰说明卡片——展示「只读本机 Claude Code OAuth 凭据，直接连接 Anthropic 查询 5h / 7d 额度，不读取浏览器 Cookie、不保存密码、不上传任何数据」，提供主按钮「启用 Claude 额度监控」。
-- **已启用·正常态**：
-  - 顶部标题行：Provider 标题（`Claude` + Plan Badge 若有）+ 上次更新时间 + 手动刷新按钮（加载中显示小号 ProgressView）。
-  - **5-Hour Session 主卡片**：大号数字（如 `78% left` 或 `22% used`）、语义色进度条（剩余 > 30% 绿色 `Theme.health`，10%–30% 琥珀 `Theme.warning`，≤ 10% 红色 `Theme.critical`）、精准重置倒计时（如 `Resets in 2h 14m · 18:30`）。
-  - **7-Day Weekly 卡片**：同等规格进度条与重置倒计时（如 `Resets Thu 08:00`）。
-  - **扩展明细区（条件显示）**：若接口返回分模型 7d 配额或 `extra_usage` 超额花费，以紧凑列表卡片展示；否则不占位。
-  - **底部信息条**：当前口径切换快捷提示或「在 Settings 中切换 剩余/已用」+ 隐私说明。
-- **错误 / 引导态**：
-  - `credentialsMissing`：提示未检测到 Claude Code 登录凭据，给出命令 `claude /login`（带一键复制按钮）+「重试」按钮。
-  - `tokenExpired / unauthorized`：提示登录态已过期，同样给出 `claude /login` 复制按钮 +「重试」按钮。
-  - `rateLimited / networkFailure / endpointUnavailable`：若有旧快照则顶部黄色条提示原因并保留旧数据；若无旧快照则展示诊断说明与「重试」按钮。
+#### 4) AI 详情页（`AIUsagePanelView`）多条目状态矩阵
+- **未启用态（默认首屏）**：清晰说明卡片——展示「选择要监控的本机 AI CLI 订阅，所有服务商默认关闭、严格只读」，提供 Claude / OpenAI Codex / Gemini 三个独立开关与本地凭据路径说明；关闭期间零凭据读取。
+- **已启用·多卡片态**：
+  - 顶部标题行与紧凑开关条：展示整体最新更新时间戳与全部刷新按钮，并通过顶部三枚独立开关胶囊随时勾选/取消任一服务商。
+  - 每个已启用服务商渲染一张独立 `V2Card`：服务商名称/图标、`planLabel` / `accountLabel`（若有）、单卡更新时间与独立刷新按钮、全部配额窗口（`LynxProgressBar` + 语义色 + 倒计时）、Anthropic `extraUsage` 或 Codex `credits` 摘要。
+  - **独立错误 / 引导态**：单卡凭据缺失/过期显示可一键复制的对应终端命令（`claude /login` / `codex login` / `gemini`）与 `Retry` 按钮；遇到 `429` 或网络异常若有旧快照则卡内顶部展示黄色提示条并保留旧数据，且互不干扰同屏其他服务商状态。
+  - **底部信息条**：内嵌 `LynxSegmentedPill` 直接切换 `Left` / `Used` 显示口径，附 `Settings` 快捷跳转与只读隐私说明。
 
 ---
 

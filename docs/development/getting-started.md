@@ -52,7 +52,7 @@ xcodegen generate && open LynxBar.xcodeproj
 │   ├── LynxBar/
 │   │   ├── App/          # LynxBarApp, AppDelegate, MenuBarStatusPresenter
 │   │   ├── Kit/          # Log, Settings, MonitoringDemand*, MenuBar*, MetricHistory, Theme, PanelHost
-│   │   ├── Providers/    # System probes, DiskCleanup/, AIUsage/ (ClaudeCredentialReader, ClaudeUsageProvider)
+│   │   ├── Providers/    # System probes, DiskCleanup/, AIUsage/ (Claude, Codex, Gemini providers & readers)
 │   │   ├── Modules/      # Dashboard/, Settings/, DiskCleanup/, AIUsage/, per-metric views & view models
 │   │   └── Resources/    # LynxBar.entitlements, Assets.xcassets, en.lproj/, zh-Hans.lproj/
 │   └── LynxBarProcessQAHelper/

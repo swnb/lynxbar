@@ -21,7 +21,7 @@ struct DiskPanelView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 HStack {
                     Label("Disk", systemImage: "externaldrive")
                         .font(Theme.Font.title2.weight(.bold))
@@ -46,32 +46,55 @@ struct DiskPanelView: View {
                 }
                 .frame(height: 28)
 
-                V2Card {
+                V2Card(accentTint: storageColor) {
                     if let primary {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "externaldrive.fill")
-                            .font(Theme.Font.title)
-                                    .foregroundStyle(Theme.disk)
+                        VStack(alignment: .leading, spacing: 9) {
+                            HStack(spacing: 9) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(storageTint.opacity(0.14))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .strokeBorder(storageTint.opacity(0.26), lineWidth: 0.5)
+                                        }
+                                    Image(systemName: "externaldrive.fill")
+                                        .font(Theme.Font.title3.weight(.semibold))
+                                        .foregroundStyle(storageTint)
+                                }
+                                .frame(width: 32, height: 32)
+                                .accessibilityHidden(true)
+
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(primary.name)
                                         .font(Theme.Font.body.weight(.semibold))
                                         .lineLimit(1)
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: 5) {
                                         Circle().fill(storageColor).frame(width: 6, height: 6)
                                         Text(LocalizedStringKey(storageState))
                                             .font(Theme.Font.caption.weight(.medium))
                                             .foregroundStyle(storageColor)
+                                        Image(systemName: "info.circle")
+                                            .font(Theme.Font.micro.weight(.medium))
+                                            .foregroundStyle(Theme.mutedInk)
+                                            .help(thresholdTooltip)
+                                            .accessibilityLabel("Storage thresholds")
+                                            .accessibilityValue(thresholdTooltip)
                                     }
                                 }
                                 Spacer()
                                 Text(Formatters.percent(primary.usage))
                                     .font(Theme.Font.metricValue.weight(.bold))
-                                    .foregroundStyle(Theme.disk)
+                                    .foregroundStyle(storageTint)
                                     .monospacedDigit()
+                                    .lynxNumericTransition()
                             }
-                            ProgressView(value: primary.usage)
-                                .tint(Theme.disk)
+
+                            LynxProgressBar(
+                                value: primary.usage,
+                                tint: storageTint,
+                                height: 7
+                            )
+
                             HStack {
                                 Text(
                                     String(
@@ -87,12 +110,14 @@ struct DiskPanelView: View {
                                         Formatters.bytes(primary.freeBytes)
                                     )
                                 )
+                                .foregroundStyle(isStorageConstrained ? storageColor : Theme.secondaryInk)
+                                .fontWeight(isStorageConstrained ? .semibold : .regular)
                             }
                             .font(Theme.Font.captionMono)
                             .foregroundStyle(Theme.secondaryInk)
+                            .lynxNumericTransition()
                         }
-                        .padding(10)
-                        .frame(height: 94)
+                        .padding(11)
                     } else {
                         Text("Collecting disk capacity…")
                             .font(Theme.Font.subheadline)
@@ -100,6 +125,39 @@ struct DiskPanelView: View {
                             .frame(maxWidth: .infinity)
                             .padding(24)
                     }
+                }
+
+                // 将安全清理行动卡片置顶到主卷容量卡正下方，用户在存储偏低时无需跳过科普卡片即可一步清理。
+                V2Card(accentTint: isStorageConstrained ? storageColor : nil) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill((isStorageConstrained ? storageColor : Theme.disk).opacity(0.14))
+                            Image(systemName: "trash.slash")
+                                .font(Theme.Font.callout.weight(.semibold))
+                                .foregroundStyle(isStorageConstrained ? storageColor : Theme.disk)
+                        }
+                        .frame(width: 30, height: 30)
+                        .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Free up space safely")
+                                .font(Theme.Font.subheadline.weight(.semibold))
+                            Text("Review exact files before moving them to Trash")
+                                .font(Theme.Font.micro)
+                                .foregroundStyle(Theme.secondaryInk)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 4)
+                        LynxActionPillButton(
+                            title: "Review Files…",
+                            tint: isStorageConstrained ? storageColor : Theme.disk,
+                            isProminent: isStorageConstrained,
+                            action: openCleanup
+                        )
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
                 }
 
                 V2Card {
@@ -147,56 +205,8 @@ struct DiskPanelView: View {
                             cadenceHint: settings.diskCapacityCadence.rawValue
                         )
                     }
-                    .padding(8)
-                    .frame(height: 158)
-                }
-
-                V2Card {
-                    VStack(alignment: .leading, spacing: 8) {
-                        IconSectionHeader(
-                            systemName: "exclamationmark.triangle.fill",
-                            title: "Thresholds",
-                            tint: Theme.warning,
-                            accessibilityLabel: "Storage thresholds"
-                        )
-                        ThresholdRow(
-                            title: "Attention",
-                            detail: "below 15% or 30 GB free",
-                            color: Theme.warning,
-                            systemName: "exclamationmark.triangle.fill"
-                        )
-                        Divider().overlay(Theme.divider)
-                        ThresholdRow(
-                            title: "Critical",
-                            detail: "below 5% or 10 GB free",
-                            color: Theme.critical,
-                            systemName: "exclamationmark.octagon.fill"
-                        )
-                    }
-                    .padding(9)
-                    .frame(height: 82)
-                }
-
-                V2Card {
-                    HStack(spacing: 10) {
-                        Image(systemName: "trash.slash")
-                            .font(Theme.Font.title2.weight(.semibold))
-                            .foregroundStyle(Theme.disk)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Free up space safely")
-                                .font(Theme.Font.subheadline.weight(.semibold))
-                            Text("Review exact files before moving them to Trash")
-                                .font(Theme.Font.micro)
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                        Spacer()
-                        Button("Review Files…", action: openCleanup)
-                            .buttonStyle(.borderedProminent)
-                            .tint(Theme.disk)
-                            .controlSize(.small)
-                    }
-                    .padding(9)
+                    .padding(10)
+                    .frame(height: 172)
                 }
 
                 V2Card {
@@ -216,33 +226,54 @@ struct DiskPanelView: View {
                                 .font(Theme.Font.caption)
                                 .foregroundStyle(Theme.mutedInk)
                         } else {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 9) {
                                 ForEach(otherVolumes) { volume in
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text(volume.name)
-                                                .font(Theme.Font.subheadline.weight(.medium))
-                                            Text("\(volume.fileSystem) · \(volume.mountPoint)")
-                                                .font(Theme.Font.micro)
-                                                .foregroundStyle(Theme.mutedInk)
-                                                .lineLimit(1)
+                                    VStack(spacing: 4) {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(volume.name)
+                                                    .font(Theme.Font.subheadline.weight(.medium))
+                                                Text("\(volume.fileSystem) · \(volume.mountPoint)")
+                                                    .font(Theme.Font.micro)
+                                                    .foregroundStyle(Theme.mutedInk)
+                                                    .lineLimit(1)
+                                            }
+                                            Spacer()
+                                            Text(Formatters.percent(volume.usage))
+                                                .font(Theme.Font.caption.weight(.medium))
+                                                .monospacedDigit()
                                         }
-                                        Spacer()
-                                        Text(Formatters.percent(volume.usage))
-                                            .font(Theme.Font.caption)
-                                            .monospacedDigit()
+                                        LynxProgressBar(value: volume.usage, tint: Theme.disk, height: 4)
                                     }
                                 }
                             }
                         }
                     }
                 }
-                .frame(minHeight: 38, alignment: .top)
+                .frame(minHeight: 42, alignment: .top)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
         .scrollIndicators(.hidden)
+    }
+
+    private var isStorageConstrained: Bool {
+        storageState == "Storage critical" || storageState == "Storage needs attention"
+    }
+
+    private var storageTint: Color {
+        switch storageState {
+        case "Storage critical": return Theme.critical
+        case "Storage needs attention": return Theme.warning
+        default: return Theme.disk
+        }
+    }
+
+    private var thresholdTooltip: String {
+        let attention = NSLocalizedString("below 15% or 30 GB free", comment: "")
+        let critical = NSLocalizedString("below 5% or 10 GB free", comment: "")
+        return "\(NSLocalizedString("Attention", comment: "")): \(attention) · \(NSLocalizedString("Critical", comment: "")): \(critical)"
     }
 
     private var storageState: String {

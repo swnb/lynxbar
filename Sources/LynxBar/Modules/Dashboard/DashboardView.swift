@@ -54,6 +54,7 @@ struct DashboardView: View {
     @ObservedObject var accessoryPower: AccessoryPowerViewModel
     @ObservedObject var aiUsage: AIUsageViewModel
     @ObservedObject private var settings = Settings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: DashboardSection = .overview
     private let onSelectionChange: (DashboardSection) -> Void
     private let openDiskCleanup: () -> Void
@@ -144,19 +145,19 @@ struct DashboardView: View {
             .id(selection)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
-            .transition(.opacity.combined(with: .move(edge: .trailing)))
+            .transition(.opacity)
 
             BottomNavigation(
                 selection: $selection,
                 sections: visibleSections
             )
         }
-        .animation(.easeOut(duration: 0.15), value: selection)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: selection)
         .onChange(of: selection) { newValue in
             onSelectionChange(newValue)
         }
         .frame(width: 420, height: 600)
-        .background(Theme.surface)
+        .background(VisualEffectBackdrop())
         .foregroundStyle(Theme.ink)
     }
 
@@ -198,26 +199,61 @@ struct DashboardHeader: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            headerIcon
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Theme.health.opacity(0.14))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(Theme.health.opacity(0.24), lineWidth: 0.5)
+                    }
+                headerIcon
+            }
+            .frame(width: 24, height: 24)
+            .accessibilityHidden(true)
+
             Text("LynxBar")
-                .font(Theme.Font.title2.weight(.bold))
-            Spacer()
+                .font(Theme.Font.title3.weight(.bold))
+
+            Spacer(minLength: 6)
+
             Text(deviceName)
-                .font(Theme.Font.subheadline.weight(.medium))
+                .font(Theme.Font.caption.weight(.medium))
                 .foregroundStyle(Theme.secondaryInk)
                 .lineLimit(1)
-            Spacer()
-            Circle()
-                .fill(Theme.health)
-                .frame(width: 7, height: 7)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 5) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.health.opacity(0.28))
+                        .frame(width: 11, height: 11)
+                    Circle()
+                        .fill(Theme.health)
+                        .frame(width: 6, height: 6)
+                }
                 .accessibilityHidden(true)
-            Text("Live")
-                .font(Theme.Font.subheadline.weight(.medium))
-                .foregroundStyle(Theme.health)
+                Text("Live")
+                    .font(Theme.Font.micro.weight(.semibold))
+                    .foregroundStyle(Theme.health)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Theme.health.opacity(0.11))
+            .clipShape(Capsule(style: .continuous))
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(Theme.health.opacity(0.22), lineWidth: 0.5)
+            }
+
             settingsButton
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .frame(height: 42)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.cardHairline).frame(height: 0.5)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(
             String(
@@ -240,10 +276,16 @@ struct DashboardHeader: View {
                         ? Theme.selectionSoft
                         : (isSettingsHovered ? Theme.hoverFill : Color.clear)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous))
+                .overlay {
+                    if isSettingsSelected {
+                        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
+                            .strokeBorder(Theme.selection.opacity(0.28), lineWidth: 0.5)
+                    }
+                }
                 .overlay {
                     if isSettingsFocused {
-                        RoundedRectangle(cornerRadius: Theme.Radius.control)
+                        RoundedRectangle(cornerRadius: Theme.Radius.control, style: .continuous)
                             .stroke(Theme.focusRingColor(isSelected: isSettingsSelected), lineWidth: 2)
                     }
                 }
@@ -265,12 +307,12 @@ struct DashboardHeader: View {
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 18, height: 18)
+                .frame(width: 15, height: 15)
                 .foregroundStyle(Theme.health)
                 .accessibilityHidden(true)
         } else {
             Image(systemName: "waveform.path.ecg")
-                .font(Theme.Font.title2.weight(.bold))
+                .font(Theme.Font.callout.weight(.bold))
                 .foregroundStyle(Theme.health)
                 .accessibilityHidden(true)
         }
@@ -281,23 +323,34 @@ struct DashboardHeader: View {
 private struct BottomNavigation: View {
     @Binding var selection: DashboardSection
     let sections: [DashboardSection]
+    @Namespace private var tabNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 2) {
             ForEach(sections) { section in
                 BottomDestinationButton(
                     section: section,
                     isSelected: selection == section,
-                    action: { selection = section }
+                    namespace: tabNamespace,
+                    action: {
+                        if reduceMotion {
+                            selection = section
+                        } else {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.84)) {
+                                selection = section
+                            }
+                        }
+                    }
                 )
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .frame(height: 62)
-        .background(Theme.raised)
+        .background(Theme.dockSurface)
         .overlay(alignment: .top) {
-            Rectangle().fill(Theme.divider).frame(height: 1)
+            Rectangle().fill(Theme.cardHairline).frame(height: 0.5)
         }
     }
 }
@@ -306,27 +359,50 @@ private struct BottomNavigation: View {
 private struct BottomDestinationButton: View {
     let section: DashboardSection
     let isSelected: Bool
+    let namespace: Namespace.ID
     let action: () -> Void
     @FocusState private var isFocused: Bool
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 Image(systemName: section.systemName)
-                    .font(Theme.Font.title2.weight(.semibold))
+                    .font(Theme.Font.body.weight(isSelected ? .semibold : .medium))
+                    .frame(height: 18)
                 Text(LocalizedStringKey(section.rawValue))
-                    .font(Theme.Font.micro.weight(.medium))
+                    .font(Theme.Font.micro.weight(isSelected ? .semibold : .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(isSelected ? Theme.selection : Theme.secondaryInk)
+            .foregroundStyle(isSelected ? Theme.selection : (isHovered ? Theme.ink : Theme.secondaryInk))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .v2InteractiveSurface()
-            .background(isSelected ? Theme.selectionSoft : (isHovered ? Theme.hoverFill : .clear))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.control))
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Theme.selectionSoft)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Theme.selection.opacity(0.26), lineWidth: 0.5)
+                        }
+                        .matchedGeometryEffect(id: "bottomTabSelection", in: namespace)
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Theme.hoverFill)
+                }
+            }
+            .overlay(alignment: .top) {
+                if isSelected {
+                    Capsule(style: .continuous)
+                        .fill(Theme.selection)
+                        .frame(width: 14, height: 2)
+                        .padding(.top, 2)
+                        .matchedGeometryEffect(id: "bottomTabIndicator", in: namespace)
+                }
+            }
             .overlay {
                 if isFocused {
-                    RoundedRectangle(cornerRadius: Theme.Radius.control)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .stroke(Theme.focusRingColor(isSelected: isSelected), lineWidth: 2)
                 }
             }

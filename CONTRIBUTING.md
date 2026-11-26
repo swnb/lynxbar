@@ -91,10 +91,10 @@ LynxBar's AI quota system is designed around an extensible protocol in `Sources/
    - Add a new `case` to `AIUsageProviderID` (e.g., `case myProvider`). Raw values are persisted in `Settings`.
 
 2. **Implement `AIUsageProvider` as an `actor`**:
-   - Create `Sources/LynxBar/Providers/AIUsage/<Provider>UsageProvider.swift` conforming to `AIUsageProvider` (`var id: AIUsageProviderID`, `func fetchQuota(now: Date) async -> Result<AIProviderQuotaSnapshot, AIUsageFetchError>`).
+   - Follow the existing `ClaudeUsageProvider`, `CodexUsageProvider`, and `GeminiUsageProvider` implementations: create `Sources/LynxBar/Providers/AIUsage/<Provider>UsageProvider.swift` conforming to `AIUsageProvider` (`var id: AIUsageProviderID`, `func fetchQuota(now: Date) async -> Result<AIProviderQuotaSnapshot, AIUsageFetchError>`).
    - Inject your credential reader and `AIUsageHTTPTransport` (`AIUsageHTTPClient`) via `init(...)` so unit tests stay 100% offline.
-   - Normalize provider utilization values defensively into clamped `0...1` `AIQuotaWindow` entries (`session5h`, `weekly7d`, `weeklyModelSpecific`) and optional `AIExtraUsageSummary`.
-   - Never touch browser cookies, store plaintext passwords, or silently launch browsers/CLIs when reading credentials.
+   - Normalize provider utilization values defensively into clamped `0...1` `AIQuotaWindow` entries (`session5h`, `weekly7d`, `weeklyModelSpecific`, `codeReview`, `modelQuota`) and optional `AIExtraUsageSummary` / `AIProviderCreditsSummary`.
+   - Never touch browser cookies, store plaintext passwords, refresh OAuth tokens silently, or launch browsers/CLIs when reading credentials.
 
 3. **Wire Provider & Gating into `AIUsageViewModel` & `Settings`**:
    - Update `AIUsageViewModel` (`Sources/LynxBar/Modules/AIUsage/AIUsageViewModel.swift`) and `Settings` (`Sources/LynxBar/Kit/Settings.swift`) so fetching remains strictly opt-in (`false` by default), respects `MonitoringDemandCoordinator` (`overviewHealthModules` must exclude `.aiUsage`), and honors the `300s` polling interval, `60s` cooldown, `429` exponential backoff, and `stopsAutomaticRetry` error semantics.

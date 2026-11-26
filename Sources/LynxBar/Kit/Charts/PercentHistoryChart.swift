@@ -85,14 +85,14 @@ struct PercentHistoryChart: View {
             )
             .chartXAxis {
                 AxisMarks(values: xAxisValues) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(Theme.divider)
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Theme.chartGrid)
                 }
             }
             .chartYAxis {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(Theme.divider)
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Theme.chartGrid)
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(Formatters.percent(number))

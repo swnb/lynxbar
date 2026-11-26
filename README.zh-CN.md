@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  基于 Swift 6（<code>complete</code> 严格并发）、AppKit 与 SwiftUI 构建，零第三方依赖。
+  基于 Swift 6（<code>complete</code> 严格并发）、AppKit 与 SwiftUI 构建，AI 额度引擎接入 <code>CodexBarCore</code>（MIT）。
 </p>
 
 <p align="center">
   <a href="https://github.com/swnb/lynxbar/actions/workflows/ci.yml"><img src="https://github.com/swnb/lynxbar/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/macOS-13.0%2B-000000?logo=apple&logoColor=white" alt="macOS 13.0+" />
+  <img src="https://img.shields.io/badge/macOS-14.0%2B-000000?logo=apple&logoColor=white" alt="macOS 14.0+" />
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0" />
-  <img src="https://img.shields.io/badge/Dependencies-Zero-59D163" alt="零第三方依赖" />
+  <img src="https://img.shields.io/badge/AI%20Engine-CodexBarCore%20(MIT)-59D163" alt="CodexBarCore MIT" />
   <a href="https://github.com/swnb/lynxbar/releases"><img src="https://img.shields.io/github/v/release/swnb/lynxbar?include_prereleases&color=2EB8E8&label=Release" alt="Release" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-3887FF" alt="MIT License" /></a>
 </p>
@@ -66,29 +66,32 @@
 - **保守筛选规则**：仅列出已下载至本地、非隐藏、硬链接数为 `1` 的常规文件，且满足 **大文件**（`≥ 1 GiB`）或 **陈旧大文件**（`≥ 100 MiB` 且 `≥ 90` 天未修改）。
 - **安全执行保障**：默认零预选，支持 **全部 / 大文件 / 陈旧** 筛选、**在访达中显示**、二次确认弹窗，并在移入 macOS **废纸篓** 前逐项重新校验文件身份与路径边界（绝不永久删除）。
 
-### 可选开启的 Claude 订阅额度监控（AI 额度）
-- **默认完全关闭**：除非你在 **AI** 标签页或 **设置 → 隐私** 中主动开启 **Claude 订阅额度**，否则不会读取凭据或发起任何网络请求。
-- **本机只读 OAuth**：仅以只读方式复用本机 Claude Code 凭据（优先读取 macOS 钥匙串 `"Claude Code-credentials"` 并跳过仅含 MCP 的条目，回退读取 `~/.claude/.credentials.json`）。
-- **额度与明细视图**：展示 **5 小时会话（5-hour session）**、**7 天每周（7-day weekly）**、可选分模型窗口（`Sonnet 7 天`、`Opus 7 天`、`OAuth 应用 7 天`、`Cowork 7 天`）与 **超额花费（Extra usage）**、重置倒计时，以及 **剩余额度**（默认）与 **已用额度** 显示口径切换。
-- **菜单栏与概览集成**：支持 `AI` 菜单栏槽位（如 `AI 78%`，关闭/不可用/超过 15 分钟 TTL 时显示 `AI —`）与保持 `420×600` 零溢出布局的 `概览` 紧凑摘要行。
-- **健壮的按需调度**：仅在面板可见或菜单栏配置了 `AI` 槽位时每 5 分钟轮询一次，内置 60 秒冷却窗口、单飞请求去重、5 秒手动刷新节流、`429` 指数退避（尊重 `Retry-After`）、失败时保留旧快照（Stale-while-error）以及缺失/过期时的 `claude /login` 引导。
+### 可选开启的多服务商 AI 订阅额度监控（AI 额度）
+- **默认完全关闭且独立开关**：**Claude**、**OpenAI Codex** 与 **Antigravity** 均在 **AI** 标签页及 **设置 → 隐私** 提供独立开关且默认 `false`，未开启的服务商零凭据读取、零网络请求。
+- **基于 `CodexBarCore`（MIT）与严格隐私边界**：通过薄适配层复用上游最新 Provider 协议，并显式禁用所有浏览器 Cookie 抓取策略（`cookieSource = .off`）：
+  - **Claude**：仅 OAuth 模式（读取 macOS 钥匙串 `"Claude Code-credentials"` 或 `~/.claude/.credentials.json`）。
+  - **OpenAI Codex**：本机 CLI / OAuth 凭据（`$CODEX_HOME/auth.json` 或 `~/.codex/auth.json`）。
+  - **Antigravity**：本机 Antigravity 桌面应用、IDE 或 `agy` CLI 会话（替代已下线消费端的旧 Gemini CLI）。
+- **多卡片同屏与明细视图**：每个已启用服务商独立渲染一张 `V2Card`，展示套餐/账号标签、单卡刷新、滚动或分模型配额窗口（`5 小时会话`、`7 天每周`、`代码审查`、`Gemini 模型`、`Claude 与 GPT` 与分模型配额）、**超额花费（Extra usage）**、**积分余额（Credits）**、重置倒计时及 **剩余 / 已用** 显示口径切换。
+- **菜单栏与概览集成**：支持 `AI` 菜单栏槽位（展示最受限且未过期服务商的百分比，如 `AI 78%`；VoiceOver/Tooltip 完整播报所有活跃服务商；关闭/不可用/超过 15 分钟 TTL 时显示 `AI —`）以及严格保留 `420×600` 零溢出预算的 `36pt` `概览` 紧凑行（支持 1–3 个服务商）。
+- **健壮的按需调度**：仅在面板可见或菜单栏配置了 `AI` 槽位时按服务商每 5 分钟独立轮询一次，内置隔离的 60 秒冷却窗口、单飞请求去重、5 秒手动刷新节流、`429` 指数退避（尊重 `Retry-After`）、失败时保留旧快照（Stale-while-error）以及缺失/过期时的 CLI 登录引导（`claude /login`、`codex login`、`agy login`）。
 
 ---
 
 ## 隐私承诺
 
 - **零遥测与零云同步**：无统计埋点、无崩溃上报、无远端存储、无常驻后台守护进程。
-- **默认零外网请求**：**显示公网 IP**（`showPublicIP`）与 **Claude 订阅额度**（`aiUsageEnabled`）默认均为 `false`。
-- **严格凭据边界**：绝不读取浏览器 Cookie、绝不保存明文密码、绝不静默拉起浏览器或 CLI 命令，也绝不写入钥匙串或 `~/.claude/`。
+- **默认零外网请求**：**显示公网 IP**（`showPublicIP`）与各 AI 服务商独立开关（`claudeUsageEnabled`、`codexUsageEnabled`、`antigravityUsageEnabled`）默认均为 `false`。
+- **严格凭据边界**：显式禁用浏览器 Cookie 抓取（`cookieSource = .off`）、绝不保存明文密码、绝不写入钥匙串或本机 CLI 凭据文件。
 - **敏感信息脱敏日志**：结构化 `os.Logger`（`com.swnb.LynxBar`）严禁在任何日志级别输出 OAuth Token、认证头、原始钥匙串 JSON 或响应正文；路径、IP 与用户名统一标记 `.private`。
-- **透明权限说明**：采用非沙盒 Developer ID 分发配置（`com.apple.security.app-sandbox = false` 配合 Hardened Runtime 与 `com.apple.security.network.client = true`），仅用于支持 `nettop` 进程网络归因与只读访问 `~/.claude/.credentials.json` 回退路径。
+- **透明权限说明**：采用非沙盒 Developer ID 分发配置（`com.apple.security.app-sandbox = false` 配合 Hardened Runtime 与 `com.apple.security.network.client = true`），仅用于支持 `nettop` 进程网络归因与本机 AI CLI / 应用配额检测。
 
 ---
 
 ## 安装指南
 
 ### 系统要求
-- **macOS 13.0 (Ventura)** 及以上版本（**Universal 通用二进制**：同时支持 Apple Silicon 与 Intel）
+- **macOS 14.0 (Sonoma)** 及以上版本（**Universal 通用二进制**：同时支持 Apple Silicon 与 Intel）
 
 ### Homebrew 一键安装（推荐）
 通过官方独立 Tap 一行命令安装（自动校验 `SHA-256` 并清除 macOS 隔离属性，装完直接打开、零弹窗）：
@@ -138,23 +141,23 @@ xcodegen generate && open LynxBar.xcodeproj
 - **按需驱动采样（`MonitoringDemandCoordinator`）**：通过 `.panel`、`.overviewHealth`、`.menuBar` 与 `.remediation` 四类引用计数租约触发 `0 ↔ 1` 采样边沿，确保 `nettop` 进程归因或 AI 额度请求仅在真正需要时运行；`.aiUsage` 不包含在 `overviewHealthModules` 中。
 - **四层有界本地历史**：内存保留 5 分钟实时原始样本，持久化四层平均聚合桶（`15s` / `1m` / `5m` / `30m`，最长 1 周，每序列约 1,164 个桶），原子写入 `~/Library/Application Support/LynxBar/history-v3.plist`。
 - **诚实数值语义（「未知绝不显示为 0」）**：凭据缺失、Token 过期、网络断连、历史预热或功能未开启均展示明确状态，绝不伪造 `0%` 或 `100%`。
-- **零第三方依赖**：完全基于 Apple 系统框架（`AppKit`、`SwiftUI`、`Combine`、`IOKit`、`Metal`、`GameController`、`CoreBluetooth`、`Security`、`SystemConfiguration`、`ServiceManagement`、`os`）。
+- **极简依赖架构**：所有系统硬件监控模块纯基于 Apple 系统框架（`AppKit`、`SwiftUI`、`Combine`、`IOKit`、`Metal`、`GameController`、`CoreBluetooth`、`Security`、`SystemConfiguration`、`ServiceManagement`、`os`）；可选开启的 AI 额度模块通过 SwiftPM 引入开源的 [`CodexBarCore`](https://github.com/steipete/CodexBar)（MIT），并显式关闭浏览器 Cookie 抓取（`cookieSource = .off`）。
 
 ---
 
-## 非官方 Anthropic OAuth 接口声明
+## 非官方 AI 额度接口声明
 
-Claude 额度监控功能通过本机 Claude Code OAuth 凭据请求 `https://api.anthropic.com/api/oauth/usage`。该接口属于**非官方、未公开文档的端点**，其返回结构、请求头或可用性可能随时变更，且使用受 Anthropic 服务条款约束。
+AI 额度监控功能由开源的 [`CodexBarCore`](https://github.com/steipete/CodexBar)（MIT）驱动，通过本机 CLI / 应用凭据与本地探针获取 Claude、OpenAI Codex 与 Antigravity 额度（显式禁用浏览器 Cookie 抓取）。这些接口或本地探针均属于**非官方、未公开文档的实现**，其返回结构、请求头或可用性可能随时变更，且使用受对应服务商服务条款约束。
 
-- 该功能**默认关闭**，需用户明确了解后主动启用。
-- 轮询频率限制为 5 分钟一次，并内置冷却期与 `429` 指数退避，避免对上游造成压力。
-- **LynxBar 为独立开源项目，与 Anthropic 没有任何官方隶属、背书或赞助关系。**
+- 各服务商均**默认关闭**，需用户明确了解后逐个主动启用。
+- 每个服务商轮询频率限制为 5 分钟一次，并内置冷却期与 `429` 指数退避，避免对上游造成压力。
+- **LynxBar 为独立开源项目，与 Anthropic、OpenAI 或 Google 没有任何官方隶属、背书或赞助关系。**
 
 ---
 
 ## 文档与社区
 
-- [用户指南](./docs/guides/user-guide.md) — 菜单栏模式、磁盘安全清理、Claude Code `claude /login` 配置及外观/隐私设置说明
+- [用户指南](./docs/guides/user-guide.md) — 菜单栏模式、磁盘安全清理、Claude/Codex/Antigravity 配置及外观/隐私设置说明
 - [开发者入门](./docs/development/getting-started.md) — 本地编译、0 警告冷构建门禁、单元测试、本地化校验与 QA 调试参数
 - [核心架构规范](./docs/architecture/v2-architecture-design.md) — 信息架构、按需采样、指标口径与有界历史设计
 - [贡献指南](./CONTRIBUTING.md) — Swift 6 并发规范、CI 检查与新增 `AIUsageProvider` 步骤

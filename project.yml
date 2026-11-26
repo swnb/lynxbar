@@ -2,19 +2,24 @@ name: LynxBar
 options:
   bundleIdPrefix: com.swnb
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "14.0"
   developmentLanguage: en
   createIntermediateGroups: true
   groupSortPosition: top
   knownRegions:
     - en
     - zh-Hans
+packages:
+  CodexBar:
+    url: https://github.com/steipete/CodexBar
+    # Pin exact v0.85.0 commit because CodexBar depends on branch/revision package `vortex`
+    revision: 5dd48cab770a326691b25a124d37ffee12c5f7ac
 settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_EMIT_LOC_STRINGS: YES
-    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""
@@ -26,10 +31,12 @@ targets:
   LynxBar:
     type: application
     platform: macOS
-    deploymentTarget: "13.0"
+    deploymentTarget: "14.0"
     sources:
       - path: Sources/LynxBar
     dependencies:
+      - package: CodexBar
+        product: CodexBarCore
       - sdk: IOKit.framework
       - sdk: Metal.framework
       - sdk: GameController.framework
@@ -62,6 +69,8 @@ targets:
     dependencies:
       - target: LynxBar
       - target: LynxBarProcessQAHelper
+      - package: CodexBar
+        product: CodexBarCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.swnb.LynxBarTests

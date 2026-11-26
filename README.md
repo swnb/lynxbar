@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  Built in Swift 6 (<code>complete</code> strict concurrency) with AppKit, SwiftUI, and zero third-party dependencies.
+  Built in Swift 6 (<code>complete</code> strict concurrency) with AppKit, SwiftUI, and <code>CodexBarCore</code> (MIT) for AI quota tracking.
 </p>
 
 <p align="center">
   <a href="https://github.com/swnb/lynxbar/actions/workflows/ci.yml"><img src="https://github.com/swnb/lynxbar/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/macOS-13.0%2B-000000?logo=apple&logoColor=white" alt="macOS 13.0+" />
+  <img src="https://img.shields.io/badge/macOS-14.0%2B-000000?logo=apple&logoColor=white" alt="macOS 14.0+" />
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0" />
-  <img src="https://img.shields.io/badge/Dependencies-Zero-59D163" alt="Zero Dependencies" />
+  <img src="https://img.shields.io/badge/AI%20Engine-CodexBarCore%20(MIT)-59D163" alt="CodexBarCore MIT" />
   <a href="https://github.com/swnb/lynxbar/releases"><img src="https://img.shields.io/github/v/release/swnb/lynxbar?include_prereleases&color=2EB8E8&label=Release" alt="Release" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-3887FF" alt="MIT License" /></a>
 </p>
@@ -66,29 +66,32 @@ Launch **Review Files…** from the **Disk** panel to open the **LynxBar — Fre
 - **Conservative Rules**: Flags only downloaded, non-hidden regular local files with hard-link count `1` that are either **Large** (`≥ 1 GiB`) or **Old & large** (`≥ 100 MiB` and unmodified for `≥ 90` days).
 - **Safe Execution**: Zero items preselected, **All / Large / Old** filters, **Show in Finder**, explicit confirmation dialog, and per-item identity revalidation before moving files to macOS **Trash** (never permanently deleted).
 
-### Opt-In Claude Subscription Quota (`AI Quota`)
-- **Disabled by Default**: Zero requests until you explicitly enable **Claude subscription quota** in the **AI** tab or **Settings → Privacy**.
-- **Read-Only Local OAuth**: Reuses your existing local Claude Code credentials read-only (macOS Keychain `"Claude Code-credentials"` skipping MCP-only entries, with fallback to `~/.claude/.credentials.json`).
-- **Quota & Breakdown Views**: Displays **5-hour session**, **7-day weekly**, optional model-specific windows (`Sonnet 7-day`, `Opus 7-day`, `OAuth apps 7-day`, `Cowork 7-day`), **Extra usage** overage when enabled, reset countdowns, and a **Remaining quota** (default) vs. **Used quota** toggle.
-- **Menu Bar & Overview Integration**: Optional `AI` menu bar slot (`AI 78%`, or `AI —` when off/unavailable/stale past its 15-minute TTL) and a compact `Overview` row that preserves the `420×600` zero-overflow budget.
-- **Resilient Demand Scheduling**: Polls every 5 minutes only while viewed or displayed in the menu bar, with a 60-second cooldown, single-flight deduplication, 5-second manual refresh throttle, `429` exponential backoff (`Retry-After` aware), stale-while-error banner retention, and guided `claude /login` remediation when credentials are missing or expired.
+### Opt-In Multi-Provider AI Subscription Quota (`AI Quota`)
+- **Disabled by Default & Independent Opt-In**: **Claude**, **OpenAI Codex**, and **Antigravity** each have independent toggles defaulting to `false` in the **AI** tab and **Settings → Privacy** — zero credential reads or network requests occur for any disabled provider.
+- **Powered by `CodexBarCore` (MIT) with Strict Privacy Boundaries**: Reuses upstream `CodexBarCore` provider pipelines with browser-cookie extraction explicitly disabled (`cookieSource = .off`):
+  - **Claude**: OAuth-only via macOS Keychain `"Claude Code-credentials"` or `~/.claude/.credentials.json`.
+  - **OpenAI Codex**: Local CLI / OAuth credentials (`$CODEX_HOME/auth.json` or `~/.codex/auth.json`).
+  - **Antigravity**: Local Antigravity desktop app, IDE, or `agy` CLI session (replacing the sunset consumer Gemini CLI).
+- **Simultaneous Multi-Entry Panel**: Displays an independent `V2Card` per enabled provider with plan/account badges, per-provider refresh, rolling/model windows (`5-hour session`, `7-day weekly`, `Code Review`, `Gemini Models`, `Claude and GPT`, model breakdowns), **Extra usage** (Claude), **Credits** (Codex), reset countdowns, and a **Left / Used** display toggle.
+- **Menu Bar & Overview Integration**: Optional `AI` menu bar slot (shows the most-constrained fresh provider's percentage such as `AI 78%`, names all active providers in VoiceOver/tooltips, and falls back to `AI —` when off/unavailable/stale past its 15-minute TTL) plus a compact `36pt` `Overview` row supporting 1–3 providers within the `420×600` budget.
+- **Resilient Demand Scheduling**: Polls every 5 minutes per enabled provider only while viewed or displayed in the menu bar, with isolated 60-second cooldown, single-flight deduplication, 5-second manual refresh throttle, `429` exponential backoff (`Retry-After` aware), stale-while-error banner retention, and guided CLI re-login commands (`claude /login`, `codex login`, `agy login`).
 
 ---
 
 ## Privacy Commitments
 
 - **Zero Telemetry & Zero Cloud Sync**: No analytics, no crash reporting, no remote storage, and no background daemon.
-- **Zero Outbound Requests by Default**: Both **Show public IP** (`showPublicIP`) and **Claude subscription quota** (`aiUsageEnabled`) default to `false`.
-- **Strict Credential Boundary**: Never reads browser cookies, never stores plaintext passwords, never silently launches browsers or CLI commands, and never writes to Keychain or `~/.claude/`.
+- **Zero Outbound Requests by Default**: **Show public IP** (`showPublicIP`) and all per-provider AI toggles (`claudeUsageEnabled`, `codexUsageEnabled`, `antigravityUsageEnabled`) default to `false`.
+- **Strict Credential Boundary**: Browser-cookie scraping is explicitly disabled (`cookieSource = .off`), never stores plaintext passwords, and never writes to Keychain or local CLI credential files.
 - **Secret-Redacting Diagnostics**: Structured `os.Logger` (`com.swnb.LynxBar`) never logs OAuth tokens, authorization headers, raw Keychain JSON, or HTTP response bodies; file paths, IP addresses, and usernames are marked `.private`.
-- **Transparent Entitlements**: Distributed non-sandboxed (`com.apple.security.app-sandbox = false` with Hardened Runtime and `com.apple.security.network.client = true`) solely to support `nettop` per-process network attribution and read-only `~/.claude/.credentials.json` fallback access.
+- **Transparent Entitlements**: Distributed non-sandboxed (`com.apple.security.app-sandbox = false` with Hardened Runtime and `com.apple.security.network.client = true`) solely to support `nettop` per-process network attribution and local AI CLI/app quota inspection.
 
 ---
 
 ## Installation
 
 ### Requirements
-- **macOS 13.0 (Ventura)** or later (**Universal Binary**: Apple Silicon & Intel)
+- **macOS 14.0 (Sonoma)** or later (**Universal Binary**: Apple Silicon & Intel)
 
 ### Homebrew (Recommended)
 Install with a single command via the official tap (verifies SHA-256 and clears macOS quarantine automatically):
@@ -138,23 +141,23 @@ xcodegen generate && open LynxBar.xcodeproj
 - **Demand-Driven Sampling (`MonitoringDemandCoordinator`)**: Reference-counted `0 ↔ 1` demand edges across `.panel`, `.overviewHealth`, `.menuBar`, and `.remediation` leases ensure expensive probes (like `nettop` process attribution or AI quota fetches) never run unless actively needed. `.aiUsage` is excluded from `overviewHealthModules`.
 - **4-Tier Bounded Local History**: In-memory 5-minute live samples plus four persisted archive tiers (`15s` / `1m` / `5m` / `30m` buckets up to 1 week, ~1,164 buckets per series) stored atomically in `~/Library/Application Support/LynxBar/history-v3.plist`.
 - **Honest "Never Show 0 When Unknown" Semantics**: Missing credentials, expired tokens, offline networks, warm-up windows, and disabled opt-in features render explicit states instead of fabricating `0%` or `100%`.
-- **Zero Third-Party Dependencies**: Built exclusively on Apple system frameworks (`AppKit`, `SwiftUI`, `Combine`, `IOKit`, `Metal`, `GameController`, `CoreBluetooth`, `Security`, `SystemConfiguration`, `ServiceManagement`, `os`).
+- **Minimal Dependencies**: All system monitoring modules are built purely on Apple system frameworks (`AppKit`, `SwiftUI`, `Combine`, `IOKit`, `Metal`, `GameController`, `CoreBluetooth`, `Security`, `SystemConfiguration`, `ServiceManagement`, `os`). The opt-in AI Quota module uses [`CodexBarCore`](https://github.com/steipete/CodexBar) (MIT) via SwiftPM with browser-cookie scraping explicitly disabled (`cookieSource = .off`).
 
 ---
 
-## Unofficial Anthropic OAuth Endpoint Notice
+## Unofficial AI Quota Endpoints Notice
 
-The Claude quota feature queries `https://api.anthropic.com/api/oauth/usage` using local Claude Code OAuth credentials. This is an **unofficial, undocumented endpoint** whose response schema, headers, or availability may change at any time, and whose use is subject to Anthropic's Terms of Service.
+The opt-in AI quota features are powered by [`CodexBarCore`](https://github.com/steipete/CodexBar) (MIT) and query local CLI/app OAuth credentials and status probes for Claude, OpenAI Codex, and Antigravity (with browser-cookie extraction disabled). These rely on **unofficial, undocumented endpoints or local probes** whose response schemas, headers, or availability may change at any time, and whose use is subject to the respective provider's Terms of Service.
 
-- The feature is **disabled by default** and strictly opt-in.
-- Polling is capped at a 5-minute interval with cooldown and `429` exponential backoff to avoid upstream load.
-- **LynxBar is an independent open-source project and has no official affiliation with, endorsement from, or sponsorship by Anthropic.**
+- Each provider is **disabled by default** and strictly opt-in.
+- Polling is capped at a 5-minute interval per provider with cooldown and `429` exponential backoff to avoid upstream load.
+- **LynxBar is an independent open-source project and has no official affiliation with, endorsement from, or sponsorship by Anthropic, OpenAI, or Google.**
 
 ---
 
 ## Documentation & Community
 
-- [User Guide](./docs/guides/user-guide.md) — menu bar modes, Disk Cleanup, Claude Code `claude /login` setup, and Appearance/Privacy settings
+- [User Guide](./docs/guides/user-guide.md) — menu bar modes, Disk Cleanup, Claude/Codex/Antigravity setup, and Appearance/Privacy settings
 - [Developer Getting Started](./docs/development/getting-started.md) — local build, 0-warning cold-build gate, test suite, localization, and QA flags
 - [Architecture Specification](./docs/architecture/v2-architecture-design.md) — system design, demand coordination, metric definitions, and bounded history
 - [Contributing Guide](./CONTRIBUTING.md) — Swift 6 conventions, CI checks, and adding a new `AIUsageProvider`

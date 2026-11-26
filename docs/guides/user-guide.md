@@ -2,7 +2,7 @@
 
 > **Related**: [English README](../../README.md) · [简体中文 README](../../README.zh-CN.md) · [Security Policy](../../SECURITY.md)
 
-This guide walks through **LynxBar**'s menu bar modes, monitoring tabs, Trash-safe disk cleanup, opt-in Claude subscription quota setup, and privacy/appearance controls, including exact English and Simplified Chinese (`简体中文`) UI labels.
+This guide walks through **LynxBar**'s menu bar modes, monitoring tabs, Trash-safe disk cleanup, opt-in AI subscription quota setup (Claude, OpenAI Codex, and Gemini), and privacy/appearance controls, including exact English and Simplified Chinese (`简体中文`) UI labels.
 
 ---
 
@@ -32,13 +32,13 @@ Choose one of three **Display mode** (`显示模式`) options:
 | `TMP` | System thermal state | 系统热状态 | Public `ProcessInfo.thermalState` status |
 | `BAT` | Internal battery | 内置电池 | MacBook battery percentage |
 | `ACC` | Accessory battery | 外设电量 | `GameController` & opt-in BLE accessories |
-| `AI` | AI Quota | AI 额度 | Claude 5h quota (`AI 78%`), or `AI —` when off/unavailable/stale (`15m` TTL) |
+| `AI` | AI Quota | AI 额度 | Most-constrained active AI quota (`AI 78%`), or `AI —` when off/unavailable/stale (`15m` TTL) |
 
 ---
 
 ## 2. System Monitoring Tabs
 
-- **Overview (`概览`)**: Shows system health (`Healthy` / `Attention` / `Critical` / `Collecting`), resource summary rows, a 60-second primary trend (`CPU`, `Memory`, or `Network`), the top actionable `Attention` item, top 3 processes, and a compact **AI Quota** row when Claude quota monitoring is enabled.
+- **Overview (`概览`)**: Shows system health (`Healthy` / `Attention` / `Critical` / `Collecting`), resource summary rows, a 60-second primary trend (`CPU`, `Memory`, or `Network`), the top actionable `Attention` item, top 3 processes, and a compact **AI Quota** row when one or more AI quota providers are enabled.
 - **CPU**: Per-core bars, `1m / 5m / 15m` load averages, uptime, thermal context, and top CPU processes.
 - **Memory (`内存`)**: Event-driven macOS memory pressure (`Normal` / `Warning` / `Critical`), active/wired/compressed breakdown, swap usage, and top memory processes.
 - **Disk (`磁盘`)**: Root volume (`/`) usage, capacity trend (`1h` / `1d` / `1w` ranges sampled every `10 min`, `1 hour`, or `1 day`), mounted volumes under `Advanced volumes`, and **Review Files…** (`检查文件…`).
@@ -62,33 +62,34 @@ To hide unused tabs from the bottom bar without stopping Overview health checks 
 
 ---
 
-## 4. Claude Subscription Quota (`AI Quota` / `AI 额度`)
+## 4. AI Subscription Quota (`AI Quota` / `AI 额度`)
 
-Claude subscription quota tracking is **off by default** and never makes network requests unless you enable it.
+AI subscription quota tracking for **Claude**, **OpenAI Codex**, and **Antigravity** (powered by `CodexBarCore` under the MIT license) is **off by default** and never reads credentials or makes network requests unless you explicitly enable each provider.
 
-### Enabling & First-Time Keychain Prompt
-1. Open the **AI** tab and click **Enable Claude Quota Monitoring** (`启用 Claude 额度监控`), **or** go to **Settings → Privacy** (`设置` → `隐私`) and turn on **Claude subscription quota** (`Claude 订阅额度`).
-2. On first read, macOS may show a one-time system dialog asking to allow read access to the Keychain item `"Claude Code-credentials"`.
-   - LynxBar reads Keychain **read-only** and skips MCP-only entries lacking `claudeAiOauth.accessToken`.
-   - If no OAuth token is in Keychain (or you decline), LynxBar checks `~/.claude/.credentials.json` read-only.
-   - LynxBar never accesses browser cookies, stores passwords, or silently runs CLI commands.
+### Enabling & Local Non-Cookie Sources
+1. Open the **AI** tab and toggle on the providers you want (**Claude**, **OpenAI Codex**, **Antigravity**), **or** go to **Settings → Privacy** (`设置` → `隐私`) to enable them individually.
+2. Each provider uses non-cookie local sources via `CodexBarCore` (`cookieSource = .off`, never storing passwords or writing to local credential stores):
+   - **Claude**: OAuth-only via macOS Keychain item `"Claude Code-credentials"` or `~/.claude/.credentials.json`. On first read, macOS may show a one-time Keychain read prompt.
+   - **OpenAI Codex**: Reads `$CODEX_HOME/auth.json` (when `CODEX_HOME` is set) or `~/.codex/auth.json`.
+   - **Antigravity**: Queries your local Antigravity desktop app, IDE, or `agy` CLI session (replacing the sunset consumer Gemini CLI).
 
-### Reading Your Quota & Switching Display Style
-- **5-hour session (`5 小时会话`)** & **7-day weekly (`7 天每周`)**: Shows progress bars colored by remaining headroom (green `> 30%`, amber `10%–30%`, red `≤ 10%`) and exact reset countdowns.
-- **Model breakdown (`分模型额度`) & Extra usage (`超额花费`)**: Shown automatically when returned by Anthropic (`Sonnet 7-day`, `Opus 7-day`, `OAuth apps 7-day`, `Cowork 7-day`, or active pay-as-you-go overage).
-- **Remaining vs. Used Percentage**: Go to **Settings → Privacy → Quota display** (`设置` → `隐私` → `额度显示口径`) to switch between **Remaining quota** (`剩余额度`, default, e.g., `78% left`) and **Used quota** (`已用额度`, e.g., `22% used`).
+### Reading Your Quotas, Multi-Provider Overview & Display Style
+- **Multi-Entry AI Tab**: Each enabled provider renders its own card with plan/account badges, per-provider refresh, rolling or model quota windows (`5-hour session`, `7-day weekly`, `Code Review`, `Gemini Models`, `Claude and GPT`, model-specific breakdowns), **Extra usage** (Claude), **Credits** (Codex), and reset countdowns colored by remaining headroom (green `> 30%`, amber `10%–30%`, red `≤ 10%`).
+- **Compact `Overview` Row & `AI` Menu Bar Slot**:
+  - In `Overview`, 1–3 enabled providers fit inside the fixed `36pt` summary row (`420×600` layout budget preserved).
+  - In the menu bar `AI` slot, LynxBar displays the most-constrained fresh provider's percentage (e.g., `AI 78%`) within the `132pt` Focus / `300pt` Compact width budgets, lists every active provider and percentage in the VoiceOver label/tooltip, and falls back to `AI —` when all enabled providers are off, errored without fresh data, or past the `15m` TTL.
+- **Remaining vs. Used Percentage**: Switch directly in the AI panel footer (`Left` / `Used` / `剩余` / `已用`) or under **Settings → Privacy → Quota display** (`设置` → `隐私` → `额度显示口径` — **Remaining quota** / `剩余额度` vs. **Used quota** / `已用额度`).
 - **Hiding the AI Tab**: Toggle **AI Quota** off under **Settings → Visible destinations** (`可见目的地`) if you prefer a hardware-only dashboard.
 
-### Troubleshooting (`claude /login` & Rate Limits)
-- **`Claude Code credentials not found` / `Claude session expired`**:
-  Run the following command in Terminal to sign in or refresh your OAuth session, then click **Retry** (`重试`) in LynxBar:
-  ```sh
-  claude /login
-  ```
-- **Keychain authorization denied**: If you clicked Deny on the Keychain prompt and `~/.claude/.credentials.json` is absent, LynxBar stops automatic retries so macOS will not repeatedly prompt you. Re-authenticate via `claude /login` or click **Retry** after granting read access.
-- **Rate limited (`429`)**: LynxBar retains your last valid snapshot with a status banner and backs off automatically.
+### Troubleshooting (`claude /login`, `codex login`, `agy login`, & Rate Limits)
+- **Missing or expired credentials**: Run the corresponding CLI command in Terminal to sign in or refresh your local session (or launch Antigravity), then click **Retry** (`重试`) on that provider's card:
+  - Claude: `claude /login`
+  - OpenAI Codex: `codex login`
+  - Antigravity: `agy login`
+- **Keychain authorization denied (Claude)**: If you clicked Deny on the Keychain prompt and `~/.claude/.credentials.json` is absent, LynxBar stops automatic retries so macOS will not repeatedly prompt you. Re-authenticate via `claude /login` or click **Retry** after granting read access.
+- **Rate limited (`429`)**: LynxBar retains the affected provider's last valid snapshot with a per-card status banner and backs off automatically without disturbing sibling providers.
 
-> **Disclaimer**: Claude quota monitoring queries `https://api.anthropic.com/api/oauth/usage`, an unofficial endpoint used by Claude Code. LynxBar is an independent project with no affiliation with Anthropic.
+> **Disclaimer**: AI quota monitoring queries non-public endpoints used by local CLI tools (`api.anthropic.com/api/oauth/usage`, `chatgpt.com/backend-api/wham/usage`, `cloudcode-pa.googleapis.com/v1internal:loadCodeAssist` & `:retrieveUserQuota`). LynxBar is an independent project with no affiliation with Anthropic, OpenAI, or Google.
 
 ---
 

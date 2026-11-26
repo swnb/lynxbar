@@ -50,9 +50,14 @@ enum Formatters {
         return String(format: "%.\(fractionDigits)f %@%@", value, units[index], suffix)
     }
 
-    /// 秒数 -> "3d 4h" / "4h 12m" / "12m"
+    /// Maximum finite duration formatted into day/hour/minute components to prevent `Double`-to-`Int` overflow.
+    static let maxDisplayDurationSeconds: TimeInterval = 365 * 86_400 * 100
+
+    /// Formats a non-negative duration in seconds as `"3d 4h"`, `"4h 12m"`, or `"12m"`,
+    /// clamping negative or non-finite inputs to `"0m"` and capping extreme finite durations.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
+        guard seconds.isFinite, seconds > 0 else { return "0m" }
+        let total = Int(min(seconds, maxDisplayDurationSeconds))
         let days = total / 86_400
         let hours = (total % 86_400) / 3_600
         let minutes = (total % 3_600) / 60
@@ -61,9 +66,12 @@ enum Formatters {
         return "\(minutes)m"
     }
 
-    /// 短区间覆盖率需要保留秒级信息，避免 1m 窗口在采集前 59 秒一直显示成 0m。
+    /// Formats short coverage durations while preserving seconds below one minute,
+    /// clamping negative or non-finite inputs to `"0s"` and capping extreme finite durations.
     static func compactDuration(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds.rounded(.down)))
+        guard seconds.isFinite, seconds > 0 else { return "0s" }
+        let clamped = min(seconds, maxDisplayDurationSeconds)
+        let total = max(0, Int(clamped.rounded(.down)))
         if total < 60 { return "\(total)s" }
         if total < 3_600 {
             return "\(total / 60)m \(total % 60)s"

@@ -85,11 +85,30 @@ final class Settings: ObservableObject {
         static let menuBarSlots = "menuBar.slots"
         static let standardBLEBatteryEnabled = "accessory.standardBLE.enabled"
         static let aiUsageEnabled = "aiUsage.enabled"
+        static let claudeUsageEnabled = "aiUsage.claude.enabled"
+        static let codexUsageEnabled = "aiUsage.codex.enabled"
+        static let antigravityUsageEnabled = "aiUsage.antigravity.enabled"
         static let aiQuotaDisplayStyle = "aiUsage.displayStyle"
         static let aiUsageSectionVisible = "module.aiUsage.visible"
     }
 
+    private enum AIUsageSyncTarget: Equatable {
+        case claude
+        case codex
+        case antigravity
+        case aggregate
+    }
+
+    private enum AIUsageSyncSource {
+        case fromProviders
+        case fromAggregate(Bool)
+    }
+
     private let defaults: UserDefaults
+    private var applyingAIUsageSyncTarget: AIUsageSyncTarget?
+    private var isFlushingAIUsageSync = false
+    private var isAggregateSyncHalted = false
+    private var pendingAIUsageSync: AIUsageSyncSource?
 
     @Published var updateInterval: TimeInterval {
         didSet { defaults.set(updateInterval, forKey: Key.updateInterval) }
@@ -169,9 +188,45 @@ final class Settings: ObservableObject {
     }
 
     /// Explicit opt-in controlling read-only local Claude OAuth credential reads and Anthropic usage queries (defaults to `false`).
+    /// Consumers observing `$claudeUsageEnabled` must consume the published value directly rather than re-reading this property during `willSet`.
+    @Published var claudeUsageEnabled: Bool {
+        didSet {
+            defaults.set(claudeUsageEnabled, forKey: Key.claudeUsageEnabled)
+            guard applyingAIUsageSyncTarget != .claude else { return }
+            enqueueAIUsageSync(.fromProviders)
+        }
+    }
+
+    /// Explicit opt-in controlling read-only local Codex CLI OAuth credential reads and ChatGPT usage queries (defaults to `false`).
+    /// Consumers observing `$codexUsageEnabled` must consume the published value directly rather than re-reading this property during `willSet`.
+    @Published var codexUsageEnabled: Bool {
+        didSet {
+            defaults.set(codexUsageEnabled, forKey: Key.codexUsageEnabled)
+            persistMigratedClaudeFlagIfNeeded()
+            guard applyingAIUsageSyncTarget != .codex else { return }
+            enqueueAIUsageSync(.fromProviders)
+        }
+    }
+
+    /// Explicit opt-in controlling Antigravity subscription quota queries via `CodexBarCore` (defaults to `false`).
+    /// Consumers observing `$antigravityUsageEnabled` must consume the published value directly rather than re-reading this property during `willSet`.
+    @Published var antigravityUsageEnabled: Bool {
+        didSet {
+            defaults.set(antigravityUsageEnabled, forKey: Key.antigravityUsageEnabled)
+            persistMigratedClaudeFlagIfNeeded()
+            guard applyingAIUsageSyncTarget != .antigravity else { return }
+            enqueueAIUsageSync(.fromProviders)
+        }
+    }
+
+    /// Aggregate opt-in indicating whether any AI subscription provider is enabled, kept synchronized with per-provider flags (defaults to `false`).
     /// Consumers observing `$aiUsageEnabled` must consume the published value directly rather than re-reading this property during `willSet`.
     @Published var aiUsageEnabled: Bool {
-        didSet { defaults.set(aiUsageEnabled, forKey: Key.aiUsageEnabled) }
+        didSet {
+            defaults.set(aiUsageEnabled, forKey: Key.aiUsageEnabled)
+            guard applyingAIUsageSyncTarget != .aggregate else { return }
+            enqueueAIUsageSync(.fromAggregate(aiUsageEnabled))
+        }
     }
 
     /// Percentage convention (`remaining` vs `used`) for AI quota bars, Overview row, and menu bar slot (defaults to `.remaining`).
@@ -191,7 +246,38 @@ final class Settings: ObservableObject {
         self.menuBarDisplayMode = .validated(defaults.string(forKey: Key.menuBarDisplayMode))
         self.menuBarSlots = MenuBarStatusSlot.validated(defaults.stringArray(forKey: Key.menuBarSlots))
         self.standardBLEBatteryEnabled = defaults.bool(forKey: Key.standardBLEBatteryEnabled)
-        self.aiUsageEnabled = (defaults.object(forKey: Key.aiUsageEnabled) as? Bool) ?? false
+        let storedLegacyAIUsage = defaults.object(forKey: Key.aiUsageEnabled) as? Bool
+        let storedClaude = defaults.object(forKey: Key.claudeUsageEnabled) as? Bool
+        let storedCodex = defaults.object(forKey: Key.codexUsageEnabled) as? Bool
+        let storedAntigravity = defaults.object(forKey: Key.antigravityUsageEnabled) as? Bool
+
+        let hasAnyPerProviderKey = storedClaude != nil || storedCodex != nil || storedAntigravity != nil
+
+        let resolvedClaude: Bool
+        let resolvedCodex: Bool
+        let resolvedAntigravity: Bool
+
+        if hasAnyPerProviderKey {
+            resolvedClaude = storedClaude ?? false
+            resolvedCodex = storedCodex ?? false
+            resolvedAntigravity = storedAntigravity ?? false
+        } else if let storedLegacyAIUsage {
+            // Migrate legacy single-provider `aiUsage.enabled` exclusively to Claude without
+            // mutating `UserDefaults` during `init`; persisted once any provider toggle is modified.
+            resolvedClaude = storedLegacyAIUsage
+            resolvedCodex = false
+            resolvedAntigravity = false
+        } else {
+            resolvedClaude = false
+            resolvedCodex = false
+            resolvedAntigravity = false
+        }
+        let resolvedAnyAIUsage = resolvedClaude || resolvedCodex || resolvedAntigravity
+
+        self.claudeUsageEnabled = resolvedClaude
+        self.codexUsageEnabled = resolvedCodex
+        self.antigravityUsageEnabled = resolvedAntigravity
+        self.aiUsageEnabled = resolvedAnyAIUsage
         self.aiQuotaDisplayStyle = .validated(defaults.string(forKey: Key.aiQuotaDisplayStyle))
         self.aiUsageSectionVisible = (defaults.object(forKey: Key.aiUsageSectionVisible) as? Bool) ?? true
         self.updateInterval = (defaults.object(forKey: Key.updateInterval) as? Double) ?? 2.0
@@ -225,6 +311,129 @@ final class Settings: ObservableObject {
             next[index] = slot
         }
         menuBarSlots = next
+    }
+
+    /// Returns `true` when any AI subscription quota provider is currently enabled.
+    var anyAIUsageEnabled: Bool {
+        claudeUsageEnabled || codexUsageEnabled || antigravityUsageEnabled
+    }
+
+    /// Returns enabled AI subscription quota provider identifiers in canonical `AIUsageProviderID.allCases` order.
+    var enabledAIUsageProviders: [AIUsageProviderID] {
+        AIUsageProviderID.allCases.filter { isAIProviderEnabled($0) }
+    }
+
+    /// Returns whether quota monitoring is currently enabled for `providerID`.
+    func isAIProviderEnabled(_ providerID: AIUsageProviderID) -> Bool {
+        switch providerID {
+        case .claude:
+            return claudeUsageEnabled
+        case .codex:
+            return codexUsageEnabled
+        case .antigravity:
+            return antigravityUsageEnabled
+        }
+    }
+
+    /// Updates the opt-in preference for `providerID` and keeps `aiUsageEnabled` synchronized.
+    func setAIProviderEnabled(_ enabled: Bool, for providerID: AIUsageProviderID) {
+        switch providerID {
+        case .claude:
+            claudeUsageEnabled = enabled
+        case .codex:
+            codexUsageEnabled = enabled
+        case .antigravity:
+            antigravityUsageEnabled = enabled
+        }
+    }
+
+    /// Persists an in-memory legacy Claude migration before another provider key creates `hasAnyPerProviderKey` state.
+    private func persistMigratedClaudeFlagIfNeeded() {
+        if claudeUsageEnabled && defaults.object(forKey: Key.claudeUsageEnabled) == nil {
+            defaults.set(true, forKey: Key.claudeUsageEnabled)
+        }
+    }
+
+    /// Records the latest AI toggle write and reconciles `aiUsageEnabled` with per-provider flags until quiescent,
+    /// ensuring re-entrant mutations inside `@Published` `willSet` sinks are never silently dropped.
+    private func enqueueAIUsageSync(_ source: AIUsageSyncSource) {
+        if isAggregateSyncHalted, case .fromAggregate = source {
+            return
+        }
+        pendingAIUsageSync = source
+        guard !isFlushingAIUsageSync else { return }
+        isFlushingAIUsageSync = true
+        defer {
+            isAggregateSyncHalted = false
+            applyingAIUsageSyncTarget = nil
+            isFlushingAIUsageSync = false
+        }
+
+        var iterations = 0
+        while let nextSource = pendingAIUsageSync {
+            pendingAIUsageSync = nil
+            iterations += 1
+            if iterations > 16 {
+                // Guard against oscillating re-entrant Combine observers: halt aggregate->provider
+                // cascades and run up to 4 final reconciliation passes so late per-provider mutations
+                // triggered during `$aiUsageEnabled` `willSet` converge with `anyAIUsageEnabled`.
+                isAggregateSyncHalted = true
+                for _ in 0..<4 {
+                    pendingAIUsageSync = nil
+                    let anyEnabled = anyAIUsageEnabled
+                    if aiUsageEnabled != anyEnabled {
+                        applyingAIUsageSyncTarget = .aggregate
+                        aiUsageEnabled = anyEnabled
+                        applyingAIUsageSyncTarget = nil
+                    }
+                    if pendingAIUsageSync == nil && aiUsageEnabled == anyAIUsageEnabled {
+                        break
+                    }
+                }
+                pendingAIUsageSync = nil
+                break
+            }
+
+            switch nextSource {
+            case .fromProviders:
+                let anyEnabled = anyAIUsageEnabled
+                if aiUsageEnabled != anyEnabled {
+                    applyingAIUsageSyncTarget = .aggregate
+                    aiUsageEnabled = anyEnabled
+                    applyingAIUsageSyncTarget = nil
+                }
+            case .fromAggregate(let enabled):
+                if enabled {
+                    if !anyAIUsageEnabled {
+                        applyingAIUsageSyncTarget = .claude
+                        claudeUsageEnabled = true
+                        applyingAIUsageSyncTarget = nil
+                    }
+                } else {
+                    if claudeUsageEnabled {
+                        applyingAIUsageSyncTarget = .claude
+                        claudeUsageEnabled = false
+                        applyingAIUsageSyncTarget = nil
+                    }
+                    if codexUsageEnabled {
+                        applyingAIUsageSyncTarget = .codex
+                        codexUsageEnabled = false
+                        applyingAIUsageSyncTarget = nil
+                    }
+                    if antigravityUsageEnabled {
+                        applyingAIUsageSyncTarget = .antigravity
+                        antigravityUsageEnabled = false
+                        applyingAIUsageSyncTarget = nil
+                    }
+                }
+            }
+        }
+
+        // Ensure UserDefaults reflects final in-memory state after any re-entrant `willSet` mutations.
+        defaults.set(claudeUsageEnabled, forKey: Key.claudeUsageEnabled)
+        defaults.set(codexUsageEnabled, forKey: Key.codexUsageEnabled)
+        defaults.set(antigravityUsageEnabled, forKey: Key.antigravityUsageEnabled)
+        defaults.set(aiUsageEnabled, forKey: Key.aiUsageEnabled)
     }
 
 }

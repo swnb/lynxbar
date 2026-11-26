@@ -156,39 +156,51 @@ struct OverviewView: View {
 
     /// Summary card pairing the overall system health badge with clickable CPU, Memory, Disk, and Network rows.
     private var healthCard: some View {
-        V2Card {
+        V2Card(accentTint: healthColor) {
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Spacer()
-                    HStack(spacing: 7) {
-                        Image(systemName: healthIcon)
-                            .font(Theme.Font.title.weight(.bold))
-                            .foregroundStyle(healthColor)
-                            .accessibilityHidden(true)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 8) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(healthColor.opacity(0.15))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(healthColor.opacity(0.28), lineWidth: 0.5)
+                                }
+                            Image(systemName: healthIcon)
+                                .font(Theme.Font.title3.weight(.bold))
+                                .foregroundStyle(healthColor)
+                        }
+                        .frame(width: 28, height: 28)
+                        .accessibilityHidden(true)
+
                         Text(LocalizedStringKey(healthTitle))
-                            .font(Theme.Font.title2.weight(.bold))
+                            .font(Theme.Font.title3.weight(.bold))
                             .foregroundStyle(healthColor)
+                            .lineLimit(1)
                     }
                     Text(LocalizedStringKey(healthSubtitle))
                         .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.mutedInk)
+                        .foregroundStyle(Theme.secondaryInk)
                         .lineLimit(2)
-                    Spacer()
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, aiEnabled ? 10 : 12)
-                .frame(width: 133, alignment: .leading)
+                .padding(.vertical, aiEnabled ? 8 : 10)
+                .frame(width: 132, alignment: .leading)
 
                 Rectangle()
-                    .fill(Theme.divider)
-                    .frame(width: 1)
-                    .padding(.vertical, 12)
+                    .fill(Theme.cardHairline)
+                    .frame(width: 0.5)
+                    .padding(.vertical, 10)
 
-                VStack(spacing: 0) {
+                VStack(spacing: 1) {
                     HealthMetricButton(
                         title: "CPU",
                         systemName: "cpu",
                         value: Formatters.percent(cpu.snapshot.usage),
+                        progress: cpu.snapshot.usage,
                         color: Theme.cpu,
                         isForcedHoveredForQA: visualQAForcedHoverMetric == "cpu",
                         action: { selection = .cpu }
@@ -197,6 +209,7 @@ struct OverviewView: View {
                         title: "Memory",
                         systemName: "memorychip",
                         value: Formatters.percent(memory.snapshot.usage),
+                        progress: memory.snapshot.usage,
                         color: memory.pressure == .warning || memory.pressure == .critical
                             ? Theme.warning : Theme.memory,
                         isForcedHoveredForQA: visualQAForcedHoverMetric == "memory",
@@ -206,6 +219,7 @@ struct OverviewView: View {
                         title: "Disk",
                         systemName: "externaldrive",
                         value: Formatters.percent(disk.snapshot.usage),
+                        progress: disk.snapshot.usage,
                         color: Theme.disk,
                         isForcedHoveredForQA: visualQAForcedHoverMetric == "disk",
                         action: { selection = .disk }
@@ -216,12 +230,14 @@ struct OverviewView: View {
                         value: network.snapshot.primaryInterface == nil
                             ? NSLocalizedString("Unavailable", comment: "")
                             : NSLocalizedString("Live", comment: ""),
+                        progress: nil,
+                        isLiveIndicator: network.snapshot.primaryInterface != nil,
                         color: Theme.networkInput,
                         isForcedHoveredForQA: visualQAForcedHoverMetric == "network",
                         action: { selection = .network }
                     )
                 }
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 6)
             }
         }
         .accessibilityElement(children: .contain)
@@ -281,41 +297,61 @@ struct OverviewView: View {
 
     /// Card highlighting the highest-priority active health issue with a direct jump to its detail tab.
     private var attentionCard: some View {
-        V2Card {
+        let activeIssue = healthSummary.issues.first
+        let issueAccent: Color? = activeIssue.map {
+            $0.severity == .critical ? Theme.critical : Theme.warning
+        }
+        return V2Card(accentTint: issueAccent) {
             Group {
-                if let issue = healthSummary.issues.first {
+                if let issue = activeIssue {
+                    let tint = issue.severity == .critical ? Theme.critical : Theme.warning
                     HStack(spacing: 9) {
-                        Image(systemName: issue.severity == .critical
-                            ? "exclamationmark.octagon.fill"
-                            : "exclamationmark.triangle.fill")
-                            .font(Theme.Font.title3)
-                            .foregroundStyle(issue.severity == .critical ? Theme.critical : Theme.warning)
-                            .accessibilityHidden(true)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(tint.opacity(0.15))
+                            Image(systemName: issue.severity == .critical
+                                ? "exclamationmark.octagon.fill"
+                                : "exclamationmark.triangle.fill")
+                                .font(Theme.Font.callout.weight(.semibold))
+                                .foregroundStyle(tint)
+                        }
+                        .frame(width: 26, height: 26)
+                        .accessibilityHidden(true)
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(LocalizedStringKey(issueTitle(issue)))
                                 .font(Theme.Font.subheadline.weight(.semibold))
                                 .lineLimit(1)
                             Text(issueBody(issue))
                                 .font(Theme.Font.micro)
-                                .foregroundStyle(Theme.mutedInk)
+                                .foregroundStyle(Theme.secondaryInk)
                                 .lineLimit(2)
                         }
                         Spacer(minLength: 4)
-                        Button("Review") {
-                            selection = destination(for: issue)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(issue.severity == .critical ? Theme.critical : Theme.warning)
+                        LynxActionPillButton(
+                            title: "Review",
+                            tint: tint,
+                            isProminent: true,
+                            action: { selection = destination(for: issue) }
+                        )
                         .accessibilityHint(issueBody(issue))
                     }
                 } else {
+                    let statusTint = healthSummary.severity == .collecting
+                        ? Theme.secondaryInk : Theme.health
                     HStack(spacing: 9) {
-                        Image(systemName: healthSummary.severity == .collecting
-                            ? "clock"
-                            : "checkmark.circle.fill")
-                            .foregroundStyle(healthSummary.severity == .collecting
-                                ? Theme.secondaryInk : Theme.health)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(statusTint.opacity(0.13))
+                            Image(systemName: healthSummary.severity == .collecting
+                                ? "clock"
+                                : "checkmark.circle.fill")
+                                .font(Theme.Font.callout.weight(.semibold))
+                                .foregroundStyle(statusTint)
+                        }
+                        .frame(width: 26, height: 26)
+                        .accessibilityHidden(true)
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(healthSummary.severity == .collecting
                                 ? "Collecting health signals"
@@ -355,14 +391,14 @@ struct OverviewView: View {
                             rowCount: rows.count,
                             visibleRowCount: OverviewLayoutMetrics.visibleProcessRowCount
                         )
-                        Picker("Sort processes", selection: $processMetric) {
-                            Text("CPU").tag(ProcessListView.Metric.cpu)
-                            Text("Memory").tag(ProcessListView.Metric.memory)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(width: 112)
-                        .controlSize(aiEnabled ? .mini : .small)
+                        LynxSegmentedPill(
+                            options: [ProcessListView.Metric.cpu, .memory],
+                            selection: processMetric,
+                            title: { $0 == .cpu ? "CPU" : "Memory" },
+                            minItemWidth: 44,
+                            itemHeight: aiEnabled ? 18 : 20,
+                            onSelect: { processMetric = $0 }
+                        )
                     }
                 }
                 .padding(.horizontal, 10)
@@ -547,6 +583,8 @@ private struct HealthMetricButton: View {
     let title: String
     let systemName: String
     let value: String
+    var progress: Double? = nil
+    var isLiveIndicator: Bool = false
     let color: Color
     let isForcedHoveredForQA: Bool
     let action: () -> Void
@@ -555,31 +593,44 @@ private struct HealthMetricButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Image(systemName: systemName)
-                    .font(Theme.Font.callout.weight(.semibold))
+                    .font(Theme.Font.caption.weight(.semibold))
                     .foregroundStyle(color)
-                    .frame(width: 16)
+                    .frame(width: 14)
                 Text(LocalizedStringKey(title))
                     .font(Theme.Font.caption.weight(.semibold))
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let progress {
+                    LynxProgressBar(value: progress, tint: color, height: 4)
+                        .frame(width: 32)
+                } else if isLiveIndicator {
+                    Circle()
+                        .fill(Theme.health)
+                        .frame(width: 5, height: 5)
+                        .accessibilityHidden(true)
+                }
                 Text(value)
                     .font(Theme.Font.subheadlineRounded.weight(.semibold))
                     .foregroundStyle(color)
                     .monospacedDigit()
+                    .lynxNumericTransition()
+                    .lineLimit(1)
+                    .frame(minWidth: 42, alignment: .trailing)
                 Image(systemName: "chevron.right")
                     .font(Theme.Font.micro.weight(.semibold))
                     .foregroundStyle(Theme.mutedInk)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 6)
-            .frame(height: 28)
+            .frame(height: 27)
             .v2InteractiveSurface()
             .background(isHovered || isForcedHoveredForQA ? Theme.hoverFill : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay {
                 if isFocused {
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(Theme.selection, lineWidth: 2)
                 }
             }
@@ -596,26 +647,14 @@ private struct OverviewTrendPicker: View {
     @Binding var selection: OverviewTrend
 
     var body: some View {
-        HStack(spacing: 1) {
-            ForEach(OverviewTrend.allCases, id: \.self) { trend in
-                Button {
-                    selection = trend
-                } label: {
-                    Text(LocalizedStringKey(trend.rawValue))
-                        .font(Theme.Font.micro.weight(.medium))
-                        .foregroundStyle(selection == trend ? Theme.ink : Theme.secondaryInk)
-                        .frame(minWidth: 43, minHeight: 24)
-                        .v2InteractiveSurface()
-                        .background(selection == trend ? Theme.selectedFill : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == trend ? .isSelected : [])
-            }
-        }
-        .padding(2)
-        .background(Theme.raisedStrong)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        LynxSegmentedPill(
+            options: OverviewTrend.allCases,
+            selection: selection,
+            title: { $0.rawValue },
+            minItemWidth: 42,
+            itemHeight: 20,
+            onSelect: { selection = $0 }
+        )
     }
 }
 

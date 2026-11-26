@@ -5,6 +5,19 @@ All notable changes to **LynxBar** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Multi-Provider AI Subscription Quota (`Claude`, `OpenAI Codex`, `Antigravity`) powered by `CodexBarCore` (MIT)**:
+  - Integrated `CodexBarCore` (`v0.85.0`, MIT) via SwiftPM with `CodexBarUsageProvider` (`cookieSource = .off`, `webExtrasEnabled = false`, `desktopCookiesEnabled = false`), replacing the sunset consumer Gemini CLI provider with **Antigravity** (`agy login` / local app & CLI probes) alongside **Claude** and **OpenAI Codex**.
+  - Added independent opt-in toggles (`claudeUsageEnabled`, `codexUsageEnabled`, `antigravityUsageEnabled`, all defaulting to `false`) with isolated per-provider polling, cooldown, single-flight deduplication, `429` backoff, and stale-while-error retention in `AIUsageViewModel`, plus persistent CLI session cleanup on app termination.
+  - Upgraded `AIUsagePanelView` to simultaneous multi-card display using `V2Card`, `LynxProgressBar`, `LynxActionPillButton`, `LynxSegmentedPill`, and per-provider CLI login remediation (`claude /login`, `codex login`, `agy login`).
+  - Extended `OverviewAIQuotaRow` (`36pt` height preserved within the `420×600` budget) and `MenuBarStatusModel` / `MenuBarStatusPresenter` (`132pt` Focus / `300pt` Compact width budgets, `900s` TTL, bilingual VoiceOver announcements naming all active providers).
+  - Updated `SettingsView` Privacy toggles and bilingual `en` / `zh-Hans` localization strings.
+
+### Changed
+- Raised minimum macOS deployment target from `macOS 13.0` to `macOS 14.0` to support `CodexBarCore`.
+
 ## [0.1.0] - 2026-11-25
 
 Initial open-source release of **LynxBar** (`com.swnb.LynxBar`).

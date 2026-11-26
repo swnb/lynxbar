@@ -25,8 +25,8 @@ enum Theme {
 
     enum Radius {
         static let control: CGFloat = 7
-        static let card: CGFloat = 10
-        static let panel: CGFloat = 12
+        static let card: CGFloat = 12
+        static let panel: CGFloat = 14
     }
 
     /// 语义字号阶梯：全部基于系统文本样式构造，随「系统设置 → 辅助功能 → 显示 →
@@ -239,6 +239,9 @@ enum Theme {
     static let nsNetworkOutput = nsWarning
     /// Accent color for AI subscription quota views (verified >= 5.4:1 contrast on light/dark `raisedStrong`).
     static let nsAiUsage = dynamic(light: (0.30, 0.26, 0.76), dark: (0.55, 0.53, 1.00))
+    /// Accent colors for Codex and Antigravity AI quota cards (verified >= 4.7:1 contrast on light/dark `raisedStrong`).
+    static let nsAiCodex = dynamic(light: (0.05, 0.45, 0.34), dark: (0.26, 0.80, 0.62))
+    static let nsAiAntigravity = dynamic(light: (0.06, 0.36, 0.78), dark: (0.36, 0.66, 1.00))
 
     static var cpu: Color { Color(nsColor: nsCpu) }
     static var memory: Color { Color(nsColor: nsMemory) }
@@ -246,6 +249,17 @@ enum Theme {
     static var gpu: Color { Color(nsColor: nsGpu) }
     static var battery: Color { Color(nsColor: nsBattery) }
     static var aiUsage: Color { Color(nsColor: nsAiUsage) }
+    static var aiCodex: Color { Color(nsColor: nsAiCodex) }
+    static var aiAntigravity: Color { Color(nsColor: nsAiAntigravity) }
+
+    /// Returns the semantic accent color for `providerID` in AI quota cards and badges.
+    static func aiProviderAccent(for providerID: AIUsageProviderID) -> Color {
+        switch providerID {
+        case .claude: return aiUsage
+        case .codex: return aiCodex
+        case .antigravity: return aiAntigravity
+        }
+    }
     /// 网络输入（下载）固定为青色，网络输出（上传）固定为琥珀色。
     /// 使用方向语义命名，避免图表实现把两条 series 误用为同一 token。
     ///
@@ -260,6 +274,77 @@ enum Theme {
     /// 面板浮层背景，取值与 `surface` 一致。PanelHost 直接把它写进 CALayer，
     /// 需要 NSColor 而非 SwiftUI Color。
     static let panelBackground = nsSurface
+
+    // MARK: - 原生毛玻璃与精密层次（Glass & Precision Elevation）
+
+    /// 是否开启系统“降低透明度”辅助功能；开启时所有毛玻璃表面自动回退到高对比不透明表面。
+    static var shouldReduceTransparency: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+    }
+
+    /// 叠在 NSVisualEffectView 之上的轻薄语义底色，平衡不同壁纸下的整体可读性。
+    static let nsPanelBackdropTint = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if isDark {
+            return NSColor(srgbRed: 0.055, green: 0.067, blue: 0.085, alpha: 0.56)
+        }
+        return NSColor(srgbRed: 0.98, green: 0.985, blue: 0.995, alpha: 0.58)
+    }
+
+    /// 面板外缘 0.5pt 精密边框（深色微亮高光边，浅色微暗轮廓边）。
+    static let nsPanelBorder = dynamicOverlay(lightAlpha: 0.14, darkAlpha: 0.16)
+
+    /// 玻璃面板之上的卡片半透明表面，兼顾通透感与 WCAG 前景可读性。
+    static let nsCardFill = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if isDark {
+            return NSColor(srgbRed: 0.115, green: 0.135, blue: 0.165, alpha: 0.58)
+        }
+        return NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.68)
+    }
+
+    /// 卡片极细描边（0.5pt），取代厚重实线边框以降低“框套框”噪音。
+    static let nsCardHairline = dynamicOverlay(lightAlpha: 0.08, darkAlpha: 0.095)
+
+    /// 卡片顶部边缘微弱镜面高光，塑造 macOS 原生浮层纵深。
+    static let nsCardTopHighlight = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor(srgbRed: 1, green: 1, blue: 1, alpha: isDark ? 0.10 : 0.72)
+    }
+
+    /// 分段控件与进度条的凹陷轨道背景。
+    static let nsControlTrack = dynamicOverlay(lightAlpha: 0.06, darkAlpha: 0.08)
+
+    /// 分段控件选中态悬浮胶囊滑块背景。
+    static let nsControlThumb = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if isDark {
+            return NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.15)
+        }
+        return NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.94)
+    }
+
+    /// 底部导航 Dock 的半透明独立底板。
+    static let nsDockSurface = NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if isDark {
+            return NSColor(srgbRed: 0.065, green: 0.080, blue: 0.100, alpha: 0.54)
+        }
+        return NSColor(srgbRed: 0.96, green: 0.97, blue: 0.985, alpha: 0.56)
+    }
+
+    /// 图表内部极淡虚线网格颜色。
+    static let nsChartGrid = dynamicOverlay(lightAlpha: 0.07, darkAlpha: 0.07)
+
+    static var panelBackdropTint: Color { Color(nsColor: nsPanelBackdropTint) }
+    static var panelBorder: Color { Color(nsColor: nsPanelBorder) }
+    static var cardFill: Color { shouldReduceTransparency ? raised : Color(nsColor: nsCardFill) }
+    static var cardHairline: Color { Color(nsColor: nsCardHairline) }
+    static var cardTopHighlight: Color { Color(nsColor: nsCardTopHighlight) }
+    static var controlTrack: Color { shouldReduceTransparency ? raisedStrong : Color(nsColor: nsControlTrack) }
+    static var controlThumb: Color { shouldReduceTransparency ? selectedFill : Color(nsColor: nsControlThumb) }
+    static var dockSurface: Color { shouldReduceTransparency ? raised : Color(nsColor: nsDockSurface) }
+    static var chartGrid: Color { Color(nsColor: nsChartGrid) }
 
     static func color(for series: Series) -> NSColor {
         switch series {

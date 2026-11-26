@@ -22,31 +22,34 @@ We will acknowledge reports as quickly as possible and coordinate a fix before p
 
 ## Security & Privacy Architecture
 
-### 1. Read-Only Keychain & Credential Boundary
-When the opt-in **Claude subscription quota** feature is enabled by the user:
-- `ClaudeCredentialReader` (`Sources/LynxBar/Providers/AIUsage/ClaudeCredentialReader.swift`) queries macOS Keychain via `SecItemCopyMatching` (`kSecClassGenericPassword`, `kSecAttrService = "Claude Code-credentials"`, `kSecReturnData: true`) in **strictly read-only** mode.
-- MCP-only Keychain items lacking `claudeAiOauth.accessToken` are skipped cleanly without modifying Keychain state.
-- If Keychain lookup returns no OAuth token or is declined, it checks `~/.claude/.credentials.json` read-only once; if Keychain access was denied (`errSecAuthFailed` / `errSecUserCanceled` / `errSecInteractionNotAllowed`) and no valid file token exists, it stops automatic retries immediately to avoid repeated system prompts.
-- LynxBar **never** writes to Keychain or `~/.claude/`, **never** reads browser cookies, **never** stores plaintext passwords, and **never** silently launches browsers or CLI commands.
+### 1. Read-Only Keychain & Local CLI Credential Boundary
+When any opt-in **AI subscription quota** provider (`claudeUsageEnabled`, `codexUsageEnabled`, or `geminiUsageEnabled`) is enabled by the user:
+- **Claude** (`ClaudeCredentialReader` in `Sources/LynxBar/Providers/AIUsage/ClaudeCredentialReader.swift`): queries macOS Keychain via `SecItemCopyMatching` (`kSecClassGenericPassword`, `kSecAttrService = "Claude Code-credentials"`, `kSecReturnData: true`) in **strictly read-only** mode, skipping MCP-only Keychain items lacking `claudeAiOauth.accessToken`, and falls back to read-only `~/.claude/.credentials.json` if needed. If Keychain access is denied (`errSecAuthFailed` / `errSecUserCanceled` / `errSecInteractionNotAllowed`) and no valid file token exists, automatic retries stop immediately.
+- **OpenAI Codex** (`CodexCredentialReader` in `Sources/LynxBar/Providers/AIUsage/CodexCredentialReader.swift`): reads `$CODEX_HOME/auth.json` or `~/.codex/auth.json` **strictly read-only**, pre-checking JWT `exp` / `last_refresh` locally without ever redeeming `refresh_token`.
+- **Gemini** (`GeminiCredentialReader` in `Sources/LynxBar/Providers/AIUsage/GeminiCredentialReader.swift`): reads `~/.gemini/settings.json` (confirming `oauth-personal` or unset auth type) and `~/.gemini/oauth_creds.json` **strictly read-only**, pre-checking `expiry_date` locally without ever refreshing tokens.
+- LynxBar **never** writes to Keychain, `~/.claude/`, `~/.codex/`, or `~/.gemini/`, **never** reads browser cookies, **never** stores plaintext passwords, and **never** silently launches browsers or CLI commands.
 
 ### 2. Zero Telemetry & Secret-Redacting Logging
 - LynxBar collects **zero** telemetry, analytics, or crash reports.
 - Diagnostic logs use Apple's unified logging (`os.Logger`, subsystem `com.swnb.LynxBar` in `Sources/LynxBar/Kit/Log.swift`).
 - OAuth tokens, `Authorization` headers, raw Keychain JSON, and HTTP response bodies are strictly forbidden at every log level.
 - IP addresses, file system paths, usernames, and OS error descriptions are marked `.private` or omitted.
-- `ClaudeOAuthCredentials` implements redacted `description` and `debugDescription` strings (`accessToken: [REDACTED]`).
+- `ClaudeOAuthCredentials`, `CodexOAuthCredentials`, and `GeminiOAuthCredentials` implement redacted `description` and `debugDescription` strings (`accessToken: [REDACTED]`, `refreshToken: [REDACTED]`, `idToken: [REDACTED]`).
 
 ### 3. Opt-In Outbound Network Calls
 By default, LynxBar makes **zero** outbound network requests:
 - `Settings.showPublicIP` defaults to `false`. When enabled, it queries `api.ipify.org`, `ifconfig.me/ip`, or `icanhazip.com` over HTTPS at most once every 10 minutes.
-- `Settings.aiUsageEnabled` defaults to `false`. When enabled, `ClaudeUsageProvider` sends requests to `https://api.anthropic.com/api/oauth/usage` using an ephemeral `URLSession` (`URLSessionConfiguration.ephemeral`, no persistent cookies or HTTP cache, 15s timeout) only while the AI tab, Overview, or an AI menu bar slot has active demand.
+- Per-provider AI toggles (`Settings.claudeUsageEnabled`, `Settings.codexUsageEnabled`, `Settings.geminiUsageEnabled`, and aggregate `Settings.aiUsageEnabled`) all default to `false`. When enabled, each active provider uses an ephemeral `URLSession` (`URLSessionConfiguration.ephemeral`, no persistent cookies or HTTP cache, 15s timeout) only while the AI tab, Overview, or an AI menu bar slot has active demand:
+  - Claude → `https://api.anthropic.com/api/oauth/usage`
+  - OpenAI Codex → `https://chatgpt.com/backend-api/wham/usage`
+  - Gemini → `https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist` & `:retrieveUserQuota`
 
 ### 4. Non-Sandboxed Entitlements Rationale
 `Sources/LynxBar/Resources/LynxBar.entitlements` enables Hardened Runtime with:
 - `com.apple.security.app-sandbox = false`
 - `com.apple.security.network.client = true`
 
-App Sandbox is disabled solely so `NetworkProcessProvider` can invoke `/usr/bin/nettop` for on-demand per-process network attribution and `ClaudeCredentialReader` can perform its read-only fallback read of `~/.claude/.credentials.json` without requesting persistent broad filesystem bookmarks.
+App Sandbox is disabled solely so `NetworkProcessProvider` can invoke `/usr/bin/nettop` for on-demand per-process network attribution and the read-only AI credential readers can inspect `~/.claude/.credentials.json`, `$CODEX_HOME/auth.json` (`~/.codex/auth.json`), and `~/.gemini/` without requesting persistent broad filesystem bookmarks.
 
 ### 5. Trash-Safe Disk Cleanup Guardrails
 `DiskCleanup` (`LocalDiskReadAdapter`, `DiskScanPolicy`, `DiskCleanupExecutor`):

@@ -132,12 +132,10 @@ struct ClaudeCredentialReader: ClaudeCredentialReading, Sendable {
         }
     }
 
-    /// Parses a numeric Unix timestamp in either milliseconds or seconds into a `Date`.
+    /// Parses a numeric Unix expiration timestamp in either milliseconds or seconds into a `Date`,
+    /// resolving finite non-positive values (`<= 0`) to epoch zero (`1970-01-01T00:00:00Z`).
     static func parseExpiresAt(_ rawValue: Double?) -> Date? {
-        guard let rawValue, rawValue.isFinite, rawValue > 0 else { return nil }
-        // Unix epoch seconds will not reach 1e11 until year ~5138; epoch ms exceeded 1e12 in 2001.
-        let seconds = rawValue >= 100_000_000_000 ? rawValue / 1_000.0 : rawValue
-        return Date(timeIntervalSince1970: seconds)
+        AIUsageParsing.parseExpiryTimestamp(rawValue)
     }
 
     /// Checks whether parsed credentials are expired or within the pre-flight safety margin.
@@ -176,7 +174,7 @@ struct ClaudeCredentialReader: ClaudeCredentialReading, Sendable {
             return .missingOAuth
         }
 
-        let expiresAt = oauth.expiresAt?.resolvedDate
+        let expiresAt = oauth.expiresAt?.resolvedExpiryDate
         let credentials = ClaudeOAuthCredentials(
             accessToken: token,
             expiresAt: expiresAt,
@@ -194,54 +192,9 @@ private struct CredentialsFilePayload: Decodable {
     /// Nested `claudeAiOauth` object containing the bearer token and metadata.
     struct OAuthPayload: Decodable {
         let accessToken: String?
-        let expiresAt: FlexibleTimestamp?
+        let expiresAt: AIUsageFlexibleTimestamp?
         let subscriptionType: String?
         let rateLimitTier: String?
-    }
-}
-
-/// Decodable timestamp accepting Unix epoch numbers (seconds/milliseconds) or ISO-8601 strings.
-private enum FlexibleTimestamp: Decodable {
-    case number(Double)
-    case string(String)
-
-    /// Decodes either a floating-point/integer Unix timestamp or a timestamp string.
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if let numeric = try? container.decode(Double.self) {
-            self = .number(numeric)
-            return
-        }
-        if let integer = try? container.decode(Int64.self) {
-            self = .number(Double(integer))
-            return
-        }
-        if let text = try? container.decode(String.self) {
-            self = .string(text)
-            return
-        }
-        throw DecodingError.typeMismatch(
-            FlexibleTimestamp.self,
-            DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Expected numeric or ISO-8601 string timestamp")
-        )
-    }
-
-    /// Converts the decoded numeric or string timestamp into a `Date`, if valid.
-    var resolvedDate: Date? {
-        switch self {
-        case .number(let value):
-            return ClaudeCredentialReader.parseExpiresAt(value)
-        case .string(let text):
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            if let numeric = Double(trimmed) {
-                return ClaudeCredentialReader.parseExpiresAt(numeric)
-            }
-            if let date = try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse(trimmed) {
-                return date
-            }
-            return try? Date.ISO8601FormatStyle(includingFractionalSeconds: false).parse(trimmed)
-        }
     }
 }
 

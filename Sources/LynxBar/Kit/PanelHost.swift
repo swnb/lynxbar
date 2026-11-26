@@ -23,7 +23,7 @@ final class PanelHost: NSObject, MonitoringDemandOwner {
     /// contentView 的 effectiveAppearance，外观变化时手动刷新背景色。
     private var appearanceObservation: NSKeyValueObservation?
 
-    private let cornerRadius: CGFloat = 10
+    private let cornerRadius: CGFloat = Theme.Radius.panel
 
     private let demandCoordinator: MonitoringDemandCoordinator
     private var sectionTokens: [DemandToken] = []
@@ -101,15 +101,17 @@ final class PanelHost: NSObject, MonitoringDemandOwner {
         if let contentView = panel.contentView {
             contentView.wantsLayer = true
             contentView.layer?.cornerRadius = cornerRadius
+            contentView.layer?.cornerCurve = .continuous
             contentView.layer?.masksToBounds = true
-            applyPanelBackground(to: contentView)
+            contentView.layer?.borderWidth = 0.5
+            applyPanelChrome(to: contentView)
             // observe(_:changeHandler:) 的闭包类型不携带 MainActor 隔离信息，编译器
             // 因此把它当成 nonisolated 上下文；effectiveAppearance 的变化实际总是在
             // 主线程上投递（AppKit 外观切换走主线程 UI 更新），用 assumeIsolated 显式
             // 断言，而不是 nonisolated(unsafe) 那种没有运行时校验的逃生舱。
             appearanceObservation = contentView.observe(\.effectiveAppearance) { [weak self] view, _ in
                 MainActor.assumeIsolated {
-                    self?.applyPanelBackground(to: view)
+                    self?.applyPanelChrome(to: view)
                 }
             }
         }
@@ -117,15 +119,31 @@ final class PanelHost: NSObject, MonitoringDemandOwner {
         position(panel: panel, button: button, buttonWindow: buttonWindow, size: size)
         self.panel = panel
 
-        panel.makeKeyAndOrderFront(nil)
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            panel.alphaValue = 1
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            panel.alphaValue = 0
+            panel.makeKeyAndOrderFront(nil)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.14
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 1
+            }
+        }
         button.highlight(true)
         installMonitor()
     }
 
-    /// 在 view 自身的有效外观下解析 `panelBackground` 并写回 CALayer。
-    private func applyPanelBackground(to view: NSView) {
+    /// 在 view 自身的有效外观下解析面板背景（降低透明度时回退纯色）与 0.5pt 精密外框边。
+    private func applyPanelChrome(to view: NSView) {
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = Theme.panelBackground.cgColor
+            if Theme.shouldReduceTransparency {
+                view.layer?.backgroundColor = Theme.panelBackground.cgColor
+            } else {
+                view.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+            view.layer?.borderColor = Theme.nsPanelBorder.cgColor
         }
     }
 

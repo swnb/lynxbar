@@ -162,8 +162,8 @@ struct NetworkThroughputChart: View {
                 }
                 .chartXAxis {
                     AxisMarks(values: xAxisValues) { _ in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(Theme.divider)
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                            .foregroundStyle(Theme.chartGrid)
                     }
                 }
                 .chartYAxis {
@@ -171,8 +171,8 @@ struct NetworkThroughputChart: View {
                         position: .leading,
                         values: yAxisValues(for: displayedYDomain)
                     ) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(Theme.divider)
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                            .foregroundStyle(Theme.chartGrid)
                         AxisValueLabel {
                             if let number = value.as(Double.self) {
                                 Text(Formatters.rate(number))

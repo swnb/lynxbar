@@ -87,7 +87,9 @@ final class MenuBarStatusPresenter {
     ) {
         let samples = MenuBarSampleCache()
         let aiSettingsMirror = AIUsageMenuBarSettingsMirror(
-            enabled: settings.aiUsageEnabled,
+            claudeEnabled: settings.claudeUsageEnabled,
+            codexEnabled: settings.codexUsageEnabled,
+            antigravityEnabled: settings.antigravityUsageEnabled,
             displayStyle: settings.aiQuotaDisplayStyle
         )
         self.init(
@@ -122,17 +124,28 @@ final class MenuBarStatusPresenter {
                 } else {
                     readings[.accessoryBattery] = .unavailable
                 }
-                if aiSettingsMirror.enabled,
-                   let aiUsage,
-                   let snapshot = aiUsage.currentSnapshot,
-                   let primary = snapshot.primaryWindow {
-                    readings[.aiUsage] = .aiQuota(
-                        usedRatio: primary.usedRatio,
-                        resetsAt: primary.resetsAt,
-                        displayStyle: aiSettingsMirror.displayStyle,
-                        observedAt: snapshot.fetchedAt,
-                        staleAfter: AIUsageViewModel.menuBarTTL
-                    )
+                if aiSettingsMirror.anyEnabled, let aiUsage {
+                    let entries: [MenuBarAIQuotaEntry] = aiSettingsMirror.enabledProviderIDs.compactMap { providerID in
+                        guard let snapshot = aiUsage.snapshot(for: providerID),
+                              let window = snapshot.primaryWindow
+                                  ?? snapshot.secondaryWindow
+                                  ?? snapshot.additionalWindows.first else {
+                            return nil
+                        }
+                        return MenuBarAIQuotaEntry(
+                            providerID: providerID,
+                            usedRatio: window.usedRatio,
+                            resetsAt: window.resetsAt,
+                            observedAt: snapshot.fetchedAt
+                        )
+                    }
+                    readings[.aiUsage] = entries.isEmpty
+                        ? .unavailable
+                        : .aiQuotas(
+                            entries,
+                            displayStyle: aiSettingsMirror.displayStyle,
+                            staleAfter: AIUsageViewModel.menuBarTTL
+                        )
                 } else {
                     readings[.aiUsage] = .unavailable
                 }
@@ -183,8 +196,14 @@ final class MenuBarStatusPresenter {
                 at: timestamp
             )
         }
-        observe(settings.$aiUsageEnabled.removeDuplicates()) { enabled in
-            aiSettingsMirror.enabled = enabled
+        observe(settings.$claudeUsageEnabled.removeDuplicates()) { enabled in
+            aiSettingsMirror.claudeEnabled = enabled
+        }
+        observe(settings.$codexUsageEnabled.removeDuplicates()) { enabled in
+            aiSettingsMirror.codexEnabled = enabled
+        }
+        observe(settings.$antigravityUsageEnabled.removeDuplicates()) { enabled in
+            aiSettingsMirror.antigravityEnabled = enabled
         }
         observe(settings.$aiQuotaDisplayStyle.removeDuplicates()) { style in
             aiSettingsMirror.displayStyle = style
@@ -197,6 +216,7 @@ final class MenuBarStatusPresenter {
         observeAfterPublication(thermal.$isPublicObservationActive)
         observeAfterPublication(accessoryPower.$snapshot)
         if let aiUsage {
+            observeAfterPublication(aiUsage.$providerStates)
             observeAfterPublication(aiUsage.$state)
             observeAfterPublication(aiUsage.$lastSuccessfulFetchAt)
         }
@@ -308,12 +328,36 @@ private extension MenuBarStatusSlot {
 /// Captures published AI quota settings synchronously on `@MainActor` so `snapshotProvider` avoids reading stale `willSet` values.
 @MainActor
 private final class AIUsageMenuBarSettingsMirror {
-    var enabled: Bool
+    var claudeEnabled: Bool
+    var codexEnabled: Bool
+    var antigravityEnabled: Bool
     var displayStyle: AIQuotaDisplayStyle
 
-    init(enabled: Bool, displayStyle: AIQuotaDisplayStyle) {
-        self.enabled = enabled
+    /// Creates a synchronous snapshot of AI quota settings for the menu bar presenter.
+    init(
+        claudeEnabled: Bool,
+        codexEnabled: Bool,
+        antigravityEnabled: Bool,
+        displayStyle: AIQuotaDisplayStyle
+    ) {
+        self.claudeEnabled = claudeEnabled
+        self.codexEnabled = codexEnabled
+        self.antigravityEnabled = antigravityEnabled
         self.displayStyle = displayStyle
+    }
+
+    /// Returns `true` when at least one AI subscription provider is enabled.
+    var anyEnabled: Bool {
+        claudeEnabled || codexEnabled || antigravityEnabled
+    }
+
+    /// Returns enabled provider identifiers in canonical `AIUsageProviderID.allCases` order.
+    var enabledProviderIDs: [AIUsageProviderID] {
+        var result: [AIUsageProviderID] = []
+        if claudeEnabled { result.append(.claude) }
+        if codexEnabled { result.append(.codex) }
+        if antigravityEnabled { result.append(.antigravity) }
+        return result
     }
 }
 
